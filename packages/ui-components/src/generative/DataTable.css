@@ -1,0 +1,71 @@
+/* ============================================
+   Data Table — Generative UI
+   ============================================ */
+
+.data-table {
+  border-radius: var(--wave-radius-md);
+  border: 1px solid var(--wave-border);
+  overflow: hidden;
+  background: var(--wave-bg-secondary);
+}
+
+.data-table__title {
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--wave-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--wave-bg-tertiary);
+  border-bottom: 1px solid var(--wave-border);
+}
+
+.data-table__scroll {
+  overflow-x: auto;
+}
+
+.data-table__scroll::-webkit-scrollbar {
+  height: 4px;
+}
+
+.data-table__scroll::-webkit-scrollbar-thumb {
+  background: var(--wave-border);
+  border-radius: 2px;
+}
+
+.data-table__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.data-table__th {
+  padding: 8px 12px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--wave-text-muted);
+  background: var(--wave-bg-tertiary);
+  border-bottom: 1px solid var(--wave-border);
+  white-space: nowrap;
+}
+
+.data-table__tr {
+  transition: background var(--wave-transition);
+}
+
+.data-table__tr:hover {
+  background: rgba(108, 99, 255, 0.04);
+}
+
+.data-table__tr:not(:last-child) {
+  border-bottom: 1px solid rgba(42, 42, 62, 0.5);
+}
+
+.data-table__td {
+  padding: 8px 12px;
+  color: var(--wave-text-primary);
+  white-space: nowrap;
+}

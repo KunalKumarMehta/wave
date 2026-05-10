@@ -1,0 +1,44 @@
+/* ============================================
+   Generic Card — Generative UI
+   ============================================ */
+
+.generic-card {
+  border-radius: var(--wave-radius-md);
+  border: 1px solid var(--wave-border);
+  overflow: hidden;
+  background: var(--wave-bg-secondary);
+}
+
+.generic-card__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--wave-bg-tertiary);
+  border-bottom: 1px solid var(--wave-border);
+}
+
+.generic-card__icon {
+  font-size: 16px;
+}
+
+.generic-card__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--wave-text-primary);
+}
+
+.generic-card__content {
+  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--wave-text-secondary);
+}
+
+.generic-card__footer {
+  padding: 8px 14px;
+  font-size: 11px;
+  color: var(--wave-text-muted);
+  border-top: 1px solid var(--wave-border);
+  background: var(--wave-bg-tertiary);
+}

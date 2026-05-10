@@ -1,0 +1,65 @@
+/* ============================================
+   Cost Badge
+   ============================================ */
+
+.cost-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: var(--wave-radius-sm);
+  background: var(--wave-bg-tertiary);
+  border: 1px solid var(--wave-border);
+  font-family: var(--wave-font-mono);
+  font-size: 10px;
+  color: var(--wave-text-muted);
+  cursor: pointer;
+  transition: all var(--wave-transition);
+  position: relative;
+  overflow: hidden;
+}
+
+.cost-badge:hover {
+  color: var(--wave-text-secondary);
+  border-color: var(--wave-text-muted);
+}
+
+.cost-badge--warning {
+  border-color: var(--wave-warning);
+  color: var(--wave-warning);
+}
+
+.cost-badge__tokens {
+  color: var(--wave-text-secondary);
+}
+
+.cost-badge__separator {
+  opacity: 0.3;
+}
+
+.cost-badge__cost {
+  color: var(--wave-success);
+}
+
+.cost-badge--warning .cost-badge__cost {
+  color: var(--wave-warning);
+}
+
+.cost-badge__budget-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--wave-bg-secondary);
+}
+
+.cost-badge__budget-fill {
+  height: 100%;
+  background: var(--wave-success);
+  transition: width 300ms ease-out;
+}
+
+.cost-badge--warning .cost-badge__budget-fill {
+  background: var(--wave-warning);
+}

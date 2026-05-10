@@ -1,0 +1,181 @@
+import React from 'react';
+import './MarkdownRenderer.css';
+
+interface MarkdownRendererProps {
+  content: string;
+}
+
+interface ParsedBlock {
+  type: 'text' | 'code' | 'heading' | 'list';
+  content: string;
+  language?: string;
+  level?: number;
+}
+
+function parseBlocks(text: string): ParsedBlock[] {
+  const blocks: ParsedBlock[] = [];
+  const lines = text.split('\n');
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // Fenced code block
+    if (line.trimStart().startsWith('```')) {
+      const language = line.trimStart().slice(3).trim();
+      const codeLines: string[] = [];
+      i++;
+      while (i < lines.length && !lines[i].trimStart().startsWith('```')) {
+        codeLines.push(lines[i]);
+        i++;
+      }
+      i++; // skip closing ```
+      blocks.push({ type: 'code', content: codeLines.join('\n'), language: language || undefined });
+      continue;
+    }
+
+    // Heading
+    const headingMatch = line.match(/^(#{1,4})\s+(.+)/);
+    if (headingMatch) {
+      blocks.push({ type: 'heading', content: headingMatch[2], level: headingMatch[1].length });
+      i++;
+      continue;
+    }
+
+    // List items — collect contiguous
+    if (line.match(/^\s*[-*•]\s/)) {
+      const listLines: string[] = [];
+      while (i < lines.length && lines[i].match(/^\s*[-*•]\s/)) {
+        listLines.push(lines[i].replace(/^\s*[-*•]\s/, ''));
+        i++;
+      }
+      blocks.push({ type: 'list', content: listLines.join('\n') });
+      continue;
+    }
+
+    // Regular text — collect contiguous non-empty lines
+    const textLines: string[] = [];
+    while (
+      i < lines.length &&
+      !lines[i].trimStart().startsWith('```') &&
+      !lines[i].match(/^#{1,4}\s/) &&
+      !lines[i].match(/^\s*[-*•]\s/)
+    ) {
+      textLines.push(lines[i]);
+      i++;
+    }
+    const combined = textLines.join('\n').trim();
+    if (combined) {
+      blocks.push({ type: 'text', content: combined });
+    }
+  }
+
+  return blocks;
+}
+
+/** Render inline markdown: bold, italic, code, links */
+function renderInline(text: string): React.ReactNode[] {
+  const parts: React.ReactNode[] = [];
+  // Pattern: **bold**, *italic*, `code`, [text](url)
+  const regex = /(\*\*(.+?)\*\*)|(\*(.+?)\*)|(`(.+?)`)|(\[(.+?)\]\((.+?)\))/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(text)) !== null) {
+    // Add text before match
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+
+    if (match[1]) {
+      // Bold
+      parts.push(<strong key={match.index}>{match[2]}</strong>);
+    } else if (match[3]) {
+      // Italic
+      parts.push(<em key={match.index}>{match[4]}</em>);
+    } else if (match[5]) {
+      // Inline code
+      parts.push(<code key={match.index} className="md-inline-code">{match[6]}</code>);
+    } else if (match[7]) {
+      // Link
+      parts.push(
+        <a key={match.index} href={match[9]} target="_blank" rel="noopener noreferrer" className="md-link">
+          {match[8]}
+        </a>
+      );
+    }
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+
+  return parts.length > 0 ? parts : [text];
+}
+
+function CodeBlock({ content, language }: { content: string; language?: string }) {
+  const [copied, setCopied] = React.useState(false);
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  return (
+    <div className="md-code-block">
+      <div className="md-code-block__header">
+        <span className="md-code-block__lang">{language || 'text'}</span>
+        <button className="md-code-block__copy" onClick={handleCopy}>
+          {copied ? '✓ Copied' : 'Copy'}
+        </button>
+      </div>
+      <pre className="md-code-block__pre">
+        <code>{content}</code>
+      </pre>
+    </div>
+  );
+}
+
+export function MarkdownRenderer({ content }: MarkdownRendererProps) {
+  const blocks = parseBlocks(content);
+
+  return (
+    <div className="md-content">
+      {blocks.map((block, i) => {
+        switch (block.type) {
+          case 'code':
+            return <CodeBlock key={i} content={block.content} language={block.language} />;
+
+          case 'heading': {
+            const Tag = `h${block.level}` as keyof JSX.IntrinsicElements;
+            return <Tag key={i} className={`md-heading md-h${block.level}`}>{renderInline(block.content)}</Tag>;
+          }
+
+          case 'list':
+            return (
+              <ul key={i} className="md-list">
+                {block.content.split('\n').map((item, j) => (
+                  <li key={j} className="md-list__item">{renderInline(item)}</li>
+                ))}
+              </ul>
+            );
+
+          case 'text':
+            return (
+              <div key={i} className="md-paragraph">
+                {block.content.split('\n').map((line, j) => (
+                  <React.Fragment key={j}>
+                    {j > 0 && <br />}
+                    {renderInline(line)}
+                  </React.Fragment>
+                ))}
+              </div>
+            );
+        }
+      })}
+    </div>
+  );
+}

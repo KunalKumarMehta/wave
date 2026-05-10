@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Wave",
+  "version": "0.1.0",
+  "description": "AI-native browser assistant",
+  "permissions": [
+    "activeTab",
+    "debugger",
+    "sidePanel",
+    "offscreen",
+    "storage"
+  ],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "src/background.ts",
+    "type": "module"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "action": {
+    "default_title": "Wave"
+  }
+}

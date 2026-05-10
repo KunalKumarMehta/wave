@@ -1,0 +1,73 @@
+/* ============================================
+   Input Bar
+   ============================================ */
+
+.input-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--wave-border);
+  background: var(--wave-bg-secondary);
+  flex-shrink: 0;
+}
+
+.input-bar__textarea {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1px solid var(--wave-border);
+  border-radius: var(--wave-radius-md);
+  background: var(--wave-bg-tertiary);
+  color: var(--wave-text-primary);
+  font-size: 14px;
+  font-family: var(--wave-font-sans);
+  line-height: 1.5;
+  resize: none;
+  outline: none;
+  transition: border-color var(--wave-transition);
+  max-height: 120px;
+}
+
+.input-bar__textarea::placeholder {
+  color: var(--wave-text-muted);
+}
+
+.input-bar__textarea:focus {
+  border-color: var(--wave-accent);
+  box-shadow: 0 0 0 2px var(--wave-accent-glow);
+}
+
+.input-bar__send {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: var(--wave-radius-sm);
+  background: var(--wave-bg-tertiary);
+  color: var(--wave-text-muted);
+  cursor: pointer;
+  transition: all var(--wave-transition);
+  flex-shrink: 0;
+}
+
+.input-bar__send:hover:not(:disabled) {
+  background: var(--wave-accent-glow);
+  color: var(--wave-accent);
+}
+
+.input-bar__send--active {
+  background: var(--wave-accent);
+  color: #fff;
+}
+
+.input-bar__send--active:hover:not(:disabled) {
+  background: var(--wave-accent-hover);
+  color: #fff;
+}
+
+.input-bar__send:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}

@@ -1,0 +1,13 @@
+{
+  "name": "wave",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter @wave/extension dev",
+    "build": "pnpm --filter @wave/extension build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

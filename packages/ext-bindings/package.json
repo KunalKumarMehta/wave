@@ -1,0 +1,19 @@
+{
+  "name": "@wave/ext-bindings",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@wave/core": "workspace:*",
+    "dexie": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.300",
+    "typescript": "^5.8.0"
+  }
+}

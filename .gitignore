@@ -1,0 +1,38 @@
+# Research docs (too large for git)
+Knowledge Base
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.crx
+*.pem
+
+# TypeScript
+*.tsbuildinfo
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+
+# Original research docs at root (pre-monorepo)
+*.md
+!README.md
+
+# pnpm
+.pnpm-debug.log
