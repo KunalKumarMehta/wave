@@ -21,6 +21,9 @@ export interface ConversationState {
   updateMessage: (id: string, updates: Partial<Message>) => void;
   appendToMessage: (id: string, content: string) => void;
   setStreaming: (streaming: boolean) => void;
+  updateConversationTitle: (id: string, title: string) => void;
+  togglePinned: (id: string) => void;
+  toggleArchived: (id: string) => void;
 }
 
 function generateId(): string {
@@ -110,4 +113,25 @@ export const conversationStore = createStore<ConversationState>((set, get) => ({
     })),
 
   setStreaming: (streaming) => set({ isStreaming: streaming }),
+
+  updateConversationTitle: (id, title) =>
+    set((state) => ({
+      conversations: state.conversations.map((c) =>
+        c.id === id ? { ...c, title, updatedAt: Date.now() } : c
+      ),
+    })),
+
+  togglePinned: (id) =>
+    set((state) => ({
+      conversations: state.conversations.map((c) =>
+        c.id === id ? { ...c, pinned: !c.pinned, updatedAt: Date.now() } : c
+      ),
+    })),
+
+  toggleArchived: (id) =>
+    set((state) => ({
+      conversations: state.conversations.map((c) =>
+        c.id === id ? { ...c, archived: !c.archived, updatedAt: Date.now() } : c
+      ),
+    })),
 }));

@@ -18,6 +18,8 @@ export interface ConversationSummary {
   messageCount: number;
   provider?: string;
   model?: string;
+  pinned?: boolean;
+  archived?: boolean;
 }
 
 export interface ConversationStorageAPI {
@@ -41,6 +43,14 @@ export interface ConversationStorageAPI {
   clear(): Promise<void>;
   /** Search conversations by title (case-insensitive). */
   search(query: string): Promise<ConversationSummary[]>;
+  /** Toggle pinned state of a conversation. */
+  togglePin(id: string): Promise<void>;
+  /** Toggle archived state of a conversation. */
+  toggleArchive(id: string): Promise<void>;
+  /** Export all conversations as JSON string. */
+  exportAll(): Promise<string>;
+  /** Import conversations from JSON string. */
+  importAll(json: string): Promise<void>;
 }
 
 function generateId(): string {
@@ -85,6 +95,8 @@ export function createConversationStorage(
             messageCount: conv.messages.length,
             provider: conv.provider,
             model: conv.model,
+            pinned: conv.pinned,
+            archived: conv.archived,
           });
         }
       }
@@ -185,6 +197,53 @@ export function createConversationStorage(
       const all = await this.list();
       const lower = query.toLowerCase();
       return all.filter((s) => s.title.toLowerCase().includes(lower));
+    },
+
+    async togglePin(id) {
+      const conv = await storageAdapter.get<Conversation>(convKey(id));
+      if (!conv) return;
+      conv.pinned = !conv.pinned;
+      conv.updatedAt = Date.now();
+      await storageAdapter.set(convKey(id), conv);
+    },
+
+    async toggleArchive(id) {
+      const conv = await storageAdapter.get<Conversation>(convKey(id));
+      if (!conv) return;
+      conv.archived = !conv.archived;
+      conv.updatedAt = Date.now();
+      await storageAdapter.set(convKey(id), conv);
+    },
+
+    async exportAll() {
+      const ids = await getIndex();
+      const all: Conversation[] = [];
+      for (const id of ids) {
+        const conv = await storageAdapter.get<Conversation>(convKey(id));
+        if (conv) all.push(conv);
+      }
+      return JSON.stringify(all, null, 2);
+    },
+
+    async importAll(json) {
+      try {
+        const parsed = JSON.parse(json) as Conversation[];
+        if (!Array.isArray(parsed)) throw new Error('Invalid JSON format');
+        const ids = await getIndex();
+        const newIds = [...ids];
+        for (const conv of parsed) {
+          if (conv.id && conv.messages) {
+            await storageAdapter.set(convKey(conv.id), conv);
+            if (!newIds.includes(conv.id)) {
+              newIds.unshift(conv.id);
+            }
+          }
+        }
+        await setIndex(newIds);
+      } catch (err) {
+        console.error('Failed to import conversations:', err);
+        throw err;
+      }
     },
   };
 }

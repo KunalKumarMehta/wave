@@ -39,7 +39,7 @@ function parseBlocks(text: string): ParsedBlock[] {
     }
 
     // Horizontal rule (---, ***, ___)
-    if (line.match(/^\s*([-*_])\s*\1\s*\1[\s\1]*$/)) {
+    if (line.match(/^\s*([-*_])\s*\1\s*\1(?:\s|\1)*$/)) {
       blocks.push({ type: 'hr', content: '' });
       i++;
       continue;
@@ -121,7 +121,7 @@ function parseBlocks(text: string): ParsedBlock[] {
       !lines[i].match(/^\s*\d+\.\s/) &&
       !lines[i].match(/^\s*>\s?/) &&
       !lines[i].match(/^\s*\|/) &&
-      !lines[i].match(/^\s*([-*_])\s*\1\s*\1[\s\1]*$/)
+      !lines[i].match(/^\s*([-*_])\s*\1\s*\1(?:\s|\1)*$/)
     ) {
       textLines.push(lines[i]);
       i++;
@@ -266,7 +266,7 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
             return <CodeBlock key={i} content={block.content} language={block.language} />;
 
           case 'heading': {
-            const Tag = `h${block.level}` as keyof JSX.IntrinsicElements;
+            const Tag = `h${block.level}` as keyof React.JSX.IntrinsicElements;
             return <Tag key={i} className={`md-heading md-h${block.level}`}>{renderInline(block.content)}</Tag>;
           }
 

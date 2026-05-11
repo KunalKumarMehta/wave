@@ -32,4 +32,8 @@ export interface Conversation {
   provider?: string;
   /** Model used. */
   model?: string;
+  /** Pinned conversation. */
+  pinned?: boolean;
+  /** Archived conversation. */
+  archived?: boolean;
 }

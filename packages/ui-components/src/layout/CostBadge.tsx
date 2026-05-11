@@ -1,4 +1,3 @@
-import React from 'react';
 import './CostBadge.css';
 
 interface CostBadgeProps {

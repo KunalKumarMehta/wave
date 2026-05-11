@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import type { Message } from '@wave/core';
 import { MarkdownRenderer } from './MarkdownRenderer.js';
 import './MessageList.css';

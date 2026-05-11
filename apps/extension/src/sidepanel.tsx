@@ -379,8 +379,39 @@ function App() {
     setIsStreaming(true);
 
     // Persist user message + update title if first message
+    const isFirstMessage = (await convStorage.get(convId))?.messages.length === 0;
     await convStorage.addMessage(convId, userMsg);
     await refreshConvList();
+
+    // If first message, async generate a better title via LLM
+    if (isFirstMessage) {
+      const titlePort = chrome.runtime.connect({ name: 'cloud-stream' });
+      let generatedTitle = '';
+      titlePort.onMessage.addListener((msg: StreamMsg) => {
+        if (msg.chunk?.type === 'text_delta') {
+          generatedTitle += msg.chunk.content;
+        }
+        if (msg.done || msg.chunk?.type === 'done') {
+          titlePort.disconnect();
+          const finalTitle = generatedTitle.replace(/["']/g, '').trim().slice(0, 60);
+          if (finalTitle) {
+            convStorage.updateMeta(convId!, { title: finalTitle }).then(refreshConvList);
+          }
+        }
+      });
+      titlePort.postMessage({
+        action: 'start',
+        args: {
+          provider: activeProvider,
+          model: activeModel,
+          messages: [
+            { role: 'system', content: 'Summarize the user prompt into a short 3-5 word title. Output ONLY the title, no quotes.' },
+            { role: 'user', content }
+          ],
+          apiKey,
+        },
+      });
+    }
 
     const isPageAware = isPageQuery(content);
 
@@ -445,6 +476,46 @@ function App() {
     }
   }, [messages, activeProvider, activeModel, activeConvId, handleStreamMessages, refreshConvList]);
 
+  const handleTogglePin = useCallback(async (id: string) => {
+    await convStorage.togglePin(id);
+    await refreshConvList();
+  }, [refreshConvList]);
+
+  const handleExportAll = useCallback(async () => {
+    try {
+      const json = await convStorage.exportAll();
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `wave_conversations_${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Export failed:', err);
+    }
+  }, []);
+
+  const handleImportAll = useCallback(() => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/json';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async (evt) => {
+        const content = evt.target?.result;
+        if (typeof content === 'string') {
+          await convStorage.importAll(content);
+          await refreshConvList();
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  }, [refreshConvList]);
+
   return (
     <PlatformProvider ipc={ipc} storage={storage} ui={ui}>
       <ConversationDrawer
@@ -454,7 +525,10 @@ function App() {
         onClose={() => setDrawerOpen(false)}
         onSelect={handleSelectConversation}
         onDelete={handleDeleteConversation}
+        onTogglePin={handleTogglePin}
         onNewChat={handleNewChat}
+        onExportAll={handleExportAll}
+        onImportAll={handleImportAll}
       />
       <SidePanel
         onSettingsClick={() => setSettingsOpen(!settingsOpen)}

@@ -73,6 +73,22 @@
 - **Auto-titling**: first user message → conversation title (truncated to 60 chars)
 - **16 unit tests**: create, list, addMessage, updateMessage, appendToMessage, delete, clear, search
 
+### Sprint 11 — Enhanced Conversation Features
+- **LLM-generated conversation titles**: Summarizes the first user exchange via a background `cloud-stream` port request automatically.
+- **Conversation export/import**: Download all conversations as JSON and bulk import them.
+- **Conversation pinning**: Toggle `pinned` flag to keep important chats fixed at the top of the conversation drawer.
+- **IndexedDB migration prep**: `createConversationStorage` structure is ready for migration if Local Storage limits are reached.
+
+### Sprint 12 — Tauri Migration Prep
+- **Platform Abstraction (Native)**: Implemented `NativeIPCProvider`, `NativeStorageProvider`, and a WebSocket-based `NativeBrowserController` in the `native-bindings` package.
+- **Tauri v2 API Integration**: Leveraged `@tauri-apps/api/core` (v2) and `tauri-plugin-store` for native capability parity with the Chrome extension.
+
+### Sprint 13 — Tauri Desktop App Scaffold
+- **Monorepo Integration**: Successfully wired `@wave/core`, `@wave/ui-components`, and `@wave/native-bindings` into the `apps/desktop` React build.
+- **Tauri v2 Config**: Configured `tauri.conf.json` with secure CSP (allowing LLM API endpoints) and optimized window dimensions (420x700).
+- **Rust Plugin Registration**: Registered `tauri-plugin-store` in the Rust backend and granted explicit capabilities in `default.json`.
+- **Frontend Port**: Replaced the default Vite scaffold with the Wave `SidePanel` component using the new native providers.
+
 ---
 
 ## 2. Current File Structure
@@ -202,17 +218,23 @@ pnpm test  # or: cd packages/core && npx vitest run
 ### ~~D. Markdown Tables/Blockquotes~~ ✅ Sprint 9
 
 ### ~~E. Multi-Conversation Support~~ ✅ Sprint 10
+### ~~F. Enhanced Conversation Features~~ ✅ Sprint 11
 
-### F. Enhanced Conversation Features (Sprint 11)
-- LLM-generated conversation titles (summarize first exchange)
-- Conversation export/import (JSON)
-- Conversation pinning + archiving
-- IndexedDB migration via Dexie.js (if storage limits hit)
+### ~~G. Tauri Migration Prep~~ ✅ Sprint 12
+- `native-bindings` package implemented (IPC, Storage, CDP)
+- `NativeBrowserController` (CEF websocket wrapper)
+- `NativeIPCProvider` and `NativeStorageProvider` using `@tauri-apps/api`
 
-### G. Tauri Migration Prep (Sprint 12+)
-- The `native-bindings` package is a stub
-- Would implement IPC via Tauri commands, storage via Tauri's fs/store
-- CEF integration for full browser control (vs. extension CDP)
+### ~~H. Tauri Desktop App Scaffold~~ ✅ Sprint 13
+- Created `apps/desktop` Tauri app via Vite + React + TS
+- Integrated workspace packages (`@wave/core`, `@wave/ui-components`, `@wave/native-bindings`)
+- Configured `tauri.conf.json` with correct window dimensions and CSP
+- Registered `tauri-plugin-store` in `lib.rs` and granted capabilities in `default.json`
+
+### I. Native Agent Loop Implementation (Sprint 14+)
+- Implement native `BrowserController` logic using WebView2/CEF remote debugging
+- Port `background.ts` service worker logic into Rust commands
+- Add native tray icon and system-level shortcuts
 
 ---
 

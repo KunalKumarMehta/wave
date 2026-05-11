@@ -8,6 +8,8 @@ export interface ConversationItem {
   messageCount: number;
   provider?: string;
   model?: string;
+  pinned?: boolean;
+  archived?: boolean;
 }
 
 interface ConversationDrawerProps {
@@ -17,7 +19,11 @@ interface ConversationDrawerProps {
   onClose: () => void;
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
+  onTogglePin?: (id: string) => void;
+  onToggleArchive?: (id: string) => void;
   onNewChat: () => void;
+  onExportAll?: () => void;
+  onImportAll?: () => void;
 }
 
 function formatTimeAgo(timestamp: number): string {
@@ -43,7 +49,10 @@ export function ConversationDrawer({
   onClose,
   onSelect,
   onDelete,
+  onTogglePin,
   onNewChat,
+  onExportAll,
+  onImportAll,
 }: ConversationDrawerProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -143,7 +152,60 @@ export function ConversationDrawer({
               {searchQuery ? 'No matching conversations' : 'No conversations yet'}
             </div>
           )}
-          {filtered.map((conv) => (
+          
+          {filtered.filter(c => c.pinned).length > 0 && (
+            <div className="conv-drawer__section-title">Pinned</div>
+          )}
+          {filtered.filter(c => c.pinned).map((conv) => (
+            <div
+              key={conv.id}
+              className={`conv-drawer__item ${conv.id === activeConversationId ? 'conv-drawer__item--active' : ''}`}
+              onClick={() => handleSelect(conv.id)}
+            >
+              <div className="conv-drawer__item-content">
+                <div className="conv-drawer__item-title">📌 {conv.title}</div>
+                <div className="conv-drawer__item-meta">
+                  <span className="conv-drawer__item-time">{formatTimeAgo(conv.updatedAt)}</span>
+                  <span className="conv-drawer__item-count">{conv.messageCount} msgs</span>
+                  {conv.model && (
+                    <span className="conv-drawer__item-model">{conv.model.split('-').slice(0, 2).join('-')}</span>
+                  )}
+                </div>
+              </div>
+              <div className="conv-drawer__item-actions">
+                {onTogglePin && (
+                  <button
+                    className="conv-drawer__item-action"
+                    onClick={(e) => { e.stopPropagation(); onTogglePin(conv.id); }}
+                    title="Unpin"
+                  >
+                    Unpin
+                  </button>
+                )}
+                <button
+                  className={`conv-drawer__item-delete ${confirmDeleteId === conv.id ? 'conv-drawer__item-delete--confirm' : ''}`}
+                  onClick={(e) => handleDelete(e, conv.id)}
+                  aria-label={confirmDeleteId === conv.id ? 'Confirm delete' : 'Delete conversation'}
+                  title={confirmDeleteId === conv.id ? 'Click again to confirm' : 'Delete'}
+                >
+                  {confirmDeleteId === conv.id ? (
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                      <path d="M3 8l4 4 6-8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  ) : (
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                      <path d="M5 3V2h6v1m-9 1h12M6 6v6m4-6v6M3 4l1 10h8l1-10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+            </div>
+          ))}
+
+          {filtered.filter(c => !c.pinned).length > 0 && (
+            <div className="conv-drawer__section-title">Recent</div>
+          )}
+          {filtered.filter(c => !c.pinned).map((conv) => (
             <div
               key={conv.id}
               className={`conv-drawer__item ${conv.id === activeConversationId ? 'conv-drawer__item--active' : ''}`}
@@ -159,24 +221,55 @@ export function ConversationDrawer({
                   )}
                 </div>
               </div>
-              <button
-                className={`conv-drawer__item-delete ${confirmDeleteId === conv.id ? 'conv-drawer__item-delete--confirm' : ''}`}
-                onClick={(e) => handleDelete(e, conv.id)}
-                aria-label={confirmDeleteId === conv.id ? 'Confirm delete' : 'Delete conversation'}
-                title={confirmDeleteId === conv.id ? 'Click again to confirm' : 'Delete'}
-              >
-                {confirmDeleteId === conv.id ? (
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                    <path d="M3 8l4 4 6-8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                ) : (
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                    <path d="M5 3V2h6v1m-9 1h12M6 6v6m4-6v6M3 4l1 10h8l1-10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
+              <div className="conv-drawer__item-actions">
+                {onTogglePin && (
+                  <button
+                    className="conv-drawer__item-action"
+                    onClick={(e) => { e.stopPropagation(); onTogglePin(conv.id); }}
+                    title="Pin"
+                  >
+                    Pin
+                  </button>
                 )}
-              </button>
+                <button
+                  className={`conv-drawer__item-delete ${confirmDeleteId === conv.id ? 'conv-drawer__item-delete--confirm' : ''}`}
+                  onClick={(e) => handleDelete(e, conv.id)}
+                  aria-label={confirmDeleteId === conv.id ? 'Confirm delete' : 'Delete conversation'}
+                  title={confirmDeleteId === conv.id ? 'Click again to confirm' : 'Delete'}
+                >
+                  {confirmDeleteId === conv.id ? (
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                      <path d="M3 8l4 4 6-8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  ) : (
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                      <path d="M5 3V2h6v1m-9 1h12M6 6v6m4-6v6M3 4l1 10h8l1-10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  )}
+                </button>
+              </div>
             </div>
           ))}
+        </div>
+
+        {/* Footer actions */}
+        <div className="conv-drawer__footer">
+          {onExportAll && (
+            <button className="conv-drawer__footer-btn" onClick={onExportAll} aria-label="Export conversations" title="Export JSON">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                <path d="M8 12V3M5 6l3-3 3 3M3 13h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              Export
+            </button>
+          )}
+          {onImportAll && (
+            <button className="conv-drawer__footer-btn" onClick={onImportAll} aria-label="Import conversations" title="Import JSON">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                <path d="M8 3v9M5 9l3 3 3-3M3 13h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              Import
+            </button>
+          )}
         </div>
       </div>
     </>

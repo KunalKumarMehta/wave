@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { usePlatform } from '../context/PlatformContext.js';
 import { PROVIDER_CATALOG, type ProviderName } from '@wave/core/src/state/settings.js';
 import './SettingsView.css';
