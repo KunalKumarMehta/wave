@@ -33,6 +33,11 @@ Thumbs.db
 # Original research docs at root (pre-monorepo)
 *.md
 !README.md
+!HANDOFF.md
+!LEARNINGS.md
+!AGENTS.md
+!CHANGELOG.md
+!.context.md
 
 # pnpm
 .pnpm-debug.log
