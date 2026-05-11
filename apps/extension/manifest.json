@@ -5,6 +5,7 @@
   "description": "AI-native browser assistant",
   "permissions": [
     "activeTab",
+    "tabs",
     "debugger",
     "sidePanel",
     "offscreen",

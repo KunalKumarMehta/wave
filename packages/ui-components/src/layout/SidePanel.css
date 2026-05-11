@@ -110,7 +110,7 @@ body {
   white-space: nowrap;
 }
 
-.side-panel__settings-btn {
+.side-panel__icon-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -124,7 +124,7 @@ body {
   transition: all var(--wave-transition);
 }
 
-.side-panel__settings-btn:hover {
+.side-panel__icon-btn:hover {
   color: var(--wave-text-primary);
   background: var(--wave-bg-tertiary);
 }

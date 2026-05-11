@@ -5,6 +5,7 @@ import './SidePanel.css';
 interface SidePanelProps {
   children: React.ReactNode;
   onSettingsClick?: () => void;
+  onNewChat?: () => void;
   activeProvider?: string;
   activeModel?: string;
   totalCost?: number;
@@ -18,6 +19,7 @@ interface SidePanelProps {
 export function SidePanel({
   children,
   onSettingsClick,
+  onNewChat,
   activeProvider,
   activeModel,
   totalCost = 0,
@@ -32,19 +34,28 @@ export function SidePanel({
         </div>
         <div className="side-panel__header-right">
           {totalTokens > 0 && (
-            <CostBadge
-              totalCost={totalCost}
-              totalTokens={totalTokens}
-            />
+            <CostBadge totalCost={totalCost} totalTokens={totalTokens} />
           )}
           {activeModel && (
             <span className="side-panel__model-badge" title={`${activeProvider}: ${activeModel}`}>
               {activeModel.split('-').slice(0, 2).join('-')}
             </span>
           )}
+          {onNewChat && (
+            <button
+              className="side-panel__icon-btn"
+              onClick={onNewChat}
+              aria-label="New chat"
+              title="New chat"
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+            </button>
+          )}
           {onSettingsClick && (
             <button
-              className="side-panel__settings-btn"
+              className="side-panel__icon-btn"
               onClick={onSettingsClick}
               aria-label="Open settings"
               title="Settings"

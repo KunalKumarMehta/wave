@@ -97,8 +97,10 @@ export class CostTracker {
   }
 
   formatCost(cost: number): string {
-    if (cost < 0.01) return `$${(cost * 100).toFixed(3)}¢`;
-    return `$${cost.toFixed(4)}`;
+    if (cost === 0) return '$0';
+    if (cost < 0.001) return `<$0.001`;
+    if (cost < 0.01) return `$${cost.toFixed(4)}`;
+    return `$${cost.toFixed(3)}`;
   }
 
   reset(): void {

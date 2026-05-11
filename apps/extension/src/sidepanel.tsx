@@ -179,7 +179,7 @@ function App() {
 
   const handleStreamMessages = useStreamHandler(setMessages, setIsStreaming, refreshCost);
 
-  // Load saved settings
+  // Load saved settings + messages
   useEffect(() => {
     storage.config.get<string>('activeProvider').then((p) => {
       if (p && p in PROVIDER_CATALOG) {
@@ -189,7 +189,28 @@ function App() {
         });
       }
     });
+    // Restore messages from last session
+    storage.config.get<Message[]>('messages').then((saved) => {
+      if (saved && saved.length > 0) {
+        // Clear any stuck streaming states
+        setMessages(saved.map((m) => ({ ...m, isStreaming: false })));
+      }
+    });
   }, []);
+
+  // Persist messages on change
+  useEffect(() => {
+    if (messages.length > 0) {
+      storage.config.set('messages', messages);
+    }
+  }, [messages]);
+
+  const handleNewChat = useCallback(() => {
+    setMessages([]);
+    costTracker.reset();
+    refreshCost();
+    storage.config.delete('messages');
+  }, [refreshCost]);
 
   const handleProviderChange = useCallback((p: ProviderName) => {
     setActiveProvider(p);
@@ -230,12 +251,14 @@ function App() {
     const isPageAware = isPageQuery(content);
 
     if (isPageAware) {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      // Get the active web page tab (not chrome:// or the side panel itself)
+      const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+      const tab = tabs.find((t) => t.url?.startsWith('http'));
       if (!tab?.id) {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantMsg.id
-              ? { ...m, content: 'Error: No active tab found', isStreaming: false }
+              ? { ...m, content: 'Error: No web page tab found. Navigate to a website first.', isStreaming: false }
               : m
           )
         );
@@ -292,6 +315,7 @@ function App() {
     <PlatformProvider ipc={ipc} storage={storage} ui={ui}>
       <SidePanel
         onSettingsClick={() => setSettingsOpen(!settingsOpen)}
+        onNewChat={handleNewChat}
         activeProvider={activeProvider}
         activeModel={activeModel}
         totalCost={totalCost}
