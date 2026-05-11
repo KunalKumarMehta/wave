@@ -11,11 +11,12 @@ import { OpenAIAdapter } from '@wave/core/src/domain/adapters/openai.js';
 import { AnthropicAdapter } from '@wave/core/src/domain/adapters/anthropic.js';
 import { GeminiAdapter } from '@wave/core/src/domain/adapters/gemini.js';
 import { serializeAXTree } from '@wave/core/src/domain/ax-serializer.js';
-import { ContextBuilder } from '@wave/core/src/domain/context-builder.js';
-import { AGENT_SYSTEM_PROMPT } from '@wave/core/src/domain/agent-tools.js';
 import { ExtBrowserController } from '@wave/ext-bindings/src/cdp.js';
+import { ProviderRouter } from '@wave/core/src/domain/provider-router.js';
+import { runAgentLoop } from '@wave/core/src/domain/agent-loop.js';
 import type { StreamAdapter, StreamRequest } from '@wave/core/src/domain/stream-provider.js';
 import type { StreamChunk } from '@wave/core/src/types/stream.js';
+import type { ProviderRoute } from '@wave/core/src/domain/provider-router.js';
 
 // Allow Side Panel to access session storage (API keys)
 chrome.storage.session.setAccessLevel({
@@ -34,6 +35,41 @@ const adapters: Record<string, StreamAdapter> = {
 
 // CDP controller
 const cdp = new ExtBrowserController();
+
+// ── Router Builder ──────────────────────────────────────────────
+
+/** Fetch stored API key for a provider. */
+async function getStoredKey(provider: string): Promise<string | null> {
+  const result = await chrome.storage.session.get(`apikey_${provider}`);
+  return result[`apikey_${provider}`] ?? null;
+}
+
+/**
+ * Build ProviderRouter with primary provider first, fallbacks from other configured providers.
+ */
+async function buildRouter(
+  primaryProvider: string,
+  primaryKey: string,
+  onFailover?: (from: string, to: string, reason: string) => void,
+): Promise<ProviderRouter> {
+  const routes: ProviderRoute[] = [];
+
+  // Primary first
+  if (adapters[primaryProvider]) {
+    routes.push({ provider: primaryProvider, adapter: adapters[primaryProvider], apiKey: primaryKey });
+  }
+
+  // Add fallbacks from other configured providers
+  for (const [name, adapter] of Object.entries(adapters)) {
+    if (name === primaryProvider) continue;
+    const key = await getStoredKey(name);
+    if (key) {
+      routes.push({ provider: name, adapter, apiKey: key });
+    }
+  }
+
+  return new ProviderRouter({ routes, maxRetries: 1, onFailover });
+}
 
 // ── Message Router ──────────────────────────────────────────────
 
@@ -250,8 +286,7 @@ function handleCloudStream(port: chrome.runtime.Port) {
       apiKey: string;
     };
 
-    const adapter = adapters[provider];
-    if (!adapter) {
+    if (!adapters[provider]) {
       port.postMessage({ error: `Unknown provider: ${provider}` });
       return;
     }
@@ -260,9 +295,13 @@ function handleCloudStream(port: chrome.runtime.Port) {
     const request: StreamRequest = { messages, model };
 
     try {
-      await adapter.stream(
+      // Build router with failover chain
+      const router = await buildRouter(provider, apiKey, (from, to, reason) => {
+        console.log(`[Wave] Failover: ${from} → ${to}: ${reason}`);
+      });
+
+      await router.stream(
         request,
-        apiKey,
         (chunk: StreamChunk) => {
           try { port.postMessage({ chunk }); } catch { abortController?.abort(); }
         },
@@ -306,37 +345,29 @@ function handleAgentStream(port: chrome.runtime.Port) {
     abortController = new AbortController();
 
     try {
-      // 1. Get page context
-      port.postMessage({ status: 'extracting_page' });
-      const pageCtx = await handleGetPageContext({ tabId });
-
-      // 2. Build context with token budget
-      const ctx = new ContextBuilder(8192)
-        .system(AGENT_SYSTEM_PROMPT)
-        .pageContext(pageCtx.markdown, pageCtx.url, pageCtx.title)
-        .history(history.slice(-4)) // Last 2 turns only for agent
-        .query(query)
-        .build();
-
-      port.postMessage({
-        status: 'thinking',
-        pageStats: pageCtx.stats,
-        tokenEstimate: ctx.tokenEstimate,
-        droppedContext: ctx.dropped,
-      });
-
-      // 3. Stream LLM response
-      const request: StreamRequest = { messages: ctx.messages, model };
-
-      await adapter.stream(
-        request,
+      // Run multi-step agent loop
+      const result = await runAgentLoop({
+        maxSteps: 5,
+        adapter,
         apiKey,
-        (chunk: StreamChunk) => {
+        model,
+        tabId,
+        query,
+        history,
+        onChunk: (chunk: StreamChunk) => {
           try { port.postMessage({ chunk }); } catch { abortController?.abort(); }
         },
-        abortController.signal,
-      );
+        onStatus: (status: string, data?: Record<string, unknown>) => {
+          try { port.postMessage({ status, ...data }); } catch { /* closed */ }
+        },
+        onAction: (action: string, params: Record<string, unknown>) => {
+          return handleAgentAction({ tabId, action, params });
+        },
+        getPageContext: (tid: number) => handleGetPageContext({ tabId: tid }),
+        signal: abortController.signal,
+      });
 
+      console.log(`[Wave] Agent loop complete: ${result.steps} steps, ${result.actions.length} actions`);
       try { port.postMessage({ done: true }); } catch { /* closed */ }
     } catch (err) {
       try {

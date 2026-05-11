@@ -58,3 +58,31 @@ All notable changes to Wave are documented here.
 - New Chat button with state reset
 - Tab-targeting fix for accurate page context extraction
 - README, HANDOFF, LEARNINGS, AGENTS documentation
+
+## [0.2.0] — 2026-05-11
+
+### Added
+
+#### Agent Loop (Sprint 8)
+- Multi-step agent execution: OBSERVE → THINK → ACT → repeat (max 5 steps)
+- Tool call parser with JSON block + inline `ACTION:` fallback (109 LOC, 15 tests)
+- Agent loop engine with page re-extraction between steps (170 LOC)
+- Agent system prompt updated for structured JSON action blocks
+- `executing_action` status indicator in Side Panel UI
+
+#### Provider Router Integration (Sprint 8)
+- `ProviderRouter` wired into service worker for cloud streams
+- Dynamic route builder from stored API keys (primary + fallback chain)
+- Auto-failover on HTTP 429/5xx with retry + linear backoff
+
+### Fixed
+- Anthropic adapter `promptTokens` always 0 — now captured from `message_start` event
+- Link regex capture groups in MarkdownRenderer
+
+### Improved
+
+#### Markdown Renderer (Sprint 9)
+- Table rendering with column alignment (left/center/right), scrollable overflow, striped hover rows
+- Ordered list support (`1. item` → `<ol>` with accent counters)
+- Blockquote rendering (`> text` → accent-bordered quote block)
+- Horizontal rule rendering (`---` → gradient accent line)

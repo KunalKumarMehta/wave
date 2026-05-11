@@ -65,6 +65,7 @@ export class AnthropicAdapter implements StreamAdapter {
 
     const decoder = new TextDecoder();
     let buffer = '';
+    let inputTokens = 0; // Captured from message_start, reported in message_delta
 
     try {
       while (true) {
@@ -113,7 +114,7 @@ export class AnthropicAdapter implements StreamAdapter {
                     finishReason: json.delta?.stop_reason === 'end_turn' ? 'stop' : 'unknown',
                     usage: json.usage
                       ? {
-                          promptTokens: 0, // Only in message_start
+                          promptTokens: inputTokens,
                           completionTokens: json.usage.output_tokens,
                         }
                       : undefined,
@@ -122,9 +123,9 @@ export class AnthropicAdapter implements StreamAdapter {
                 break;
 
               case 'message_start':
-                // Capture input tokens from message_start
+                // Capture input tokens — reported later in message_delta
                 if (json.message?.usage) {
-                  // Store for later — we'll report in message_delta
+                  inputTokens = json.message.usage.input_tokens ?? 0;
                 }
                 break;
 

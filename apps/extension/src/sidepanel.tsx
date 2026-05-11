@@ -68,7 +68,9 @@ function useStreamHandler(
               ? '🔍 Reading page structure...'
               : message.status === 'thinking'
                 ? '🧠 Analyzing page...'
-                : '';
+                : message.status === 'executing_action'
+                  ? `⚡ Executing: ${(message as Record<string, unknown>).action ?? 'action'}...`
+                  : '';
           if (statusText) {
             setMessages((prev) =>
               prev.map((m) =>

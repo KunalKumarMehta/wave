@@ -9,7 +9,7 @@ wave/
 ├── packages/
 │   ├── core/            # Platform-agnostic domain logic
 │   │   ├── abstractions/  # IPC, Storage, CDP, UI interfaces
-│   │   ├── domain/        # Streaming adapters, AX serializer, context builder
+│   │   ├── domain/        # Streaming adapters, AX serializer, agent loop, tool parser
 │   │   ├── state/         # Zustand stores (settings, conversation)
 │   │   └── types/         # Message, StreamChunk types
 │   ├── ext-bindings/    # Chrome Extension implementations
@@ -68,14 +68,15 @@ pnpm test
 
 ### Chat
 - Multi-provider streaming (OpenAI, Anthropic, Gemini)
-- Markdown rendering with code blocks + copy button
+- Markdown rendering: code blocks, tables, blockquotes, ordered/unordered lists, horizontal rules
 - Auto-resizing input with Shift+Enter for newlines
 
-### Page Awareness
+### Browser Agent
 - Ask "What's on this page?" to extract the accessibility tree
+- Multi-step actions: "Click login, then enter my email" → observe → act → repeat
 - Uses Chrome DevTools Protocol (CDP) via `chrome.debugger`
 - AX tree → Markdown+refs serialization (~93% token reduction)
-- Priority-based context builder with token budget allocation
+- Priority-based context builder with 8192-token budget
 
 ### Settings
 - Provider grid with active indicator
@@ -83,10 +84,10 @@ pnpm test
 - Encrypted API key storage (AES-256-GCM)
 - Session-based key caching
 
-### Cost Tracking
+### Reliability
 - Per-model pricing matrix (OpenAI/Anthropic/Gemini)
 - Running total in header badge (tokens + USD)
-- Provider failover with automatic retry on rate limits
+- Provider failover with automatic retry on rate limits (429/5xx)
 
 ## Development
 

@@ -1,8 +1,8 @@
 # Wave — Session Handoff Document
 
 > **Session Date:** 2026-05-10/11  
-> **Commits:** `a54b39e` → `beaec13` (2 commits, 74 files, 7,062 lines)  
-> **Status:** MVP functional — streaming chat + page awareness + all 3 providers working
+> **Commits:** `a54b39e` → current (Sprint 1–9)  
+> **Status:** Agent loop functional — multi-step browser actions + auto-failover + rich markdown
 
 ---
 
@@ -51,6 +51,21 @@
 - New Chat button (clears messages + resets cost)
 - Message persistence via `chrome.storage.local`
 
+### Sprint 8 — Agent Loop + Provider Router
+- **Multi-step agent loop**: OBSERVE → THINK → ACT → repeat until `done()` or max 5 steps
+- **Tool call parser**: JSON block + inline `ACTION:` fallback (109 LOC, 15 tests)
+- **Agent loop engine**: state machine with page re-extraction between steps (170 LOC)
+- **ProviderRouter wired**: auto-failover on 429/5xx, dynamic route building from stored keys
+- **Anthropic usage fix**: `promptTokens` now captured from `message_start` event
+- **Agent system prompt**: updated for structured JSON action blocks
+
+### Sprint 9 — UX Polish + Markdown
+- **Markdown tables**: full `| col | col |` parsing with column alignment
+- **Ordered lists**: `1. item` → `<ol>` with accent-colored counters
+- **Blockquotes**: `> text` → accent-bordered quote blocks
+- **Horizontal rules**: `---` → gradient accent line separator
+- **Agent action UI**: `⚡ Executing: click...` status during multi-step loops
+
 ---
 
 ## 2. Current File Structure
@@ -86,6 +101,8 @@ wave/                              # Root
 │   │   │   ├── domain/
 │   │   │   │   ├── adapters/      # openai.ts, anthropic.ts, gemini.ts
 │   │   │   │   ├── agent-tools.ts # Tool defs + system prompt
+│   │   │   │   ├── agent-loop.ts  # Multi-step agent engine (170 LOC)
+│   │   │   │   ├── tool-call-parser.ts # JSON/inline action parser (109 LOC)
 │   │   │   │   ├── ax-serializer.ts # AX tree → Markdown+refs (197 LOC)
 │   │   │   │   ├── context-builder.ts # Token budget allocation (133 LOC)
 │   │   │   │   ├── cost-tracker.ts # Per-model pricing (112 LOC)
@@ -93,7 +110,7 @@ wave/                              # Root
 │   │   │   │   └── stream-provider.ts # StreamAdapter interface
 │   │   │   ├── state/             # conversation.ts, settings.ts (Zustand)
 │   │   │   └── types/             # message.ts, stream.ts
-│   │   └── tests/                 # 23 vitest tests
+│   │   └── tests/                 # 38 vitest tests
 │   │
 │   ├── ext-bindings/              # Chrome Extension implementations
 │   │   └── src/
@@ -156,42 +173,33 @@ pnpm test  # or: cd packages/core && npx vitest run
 ## 5. Active Bugs & Known Issues
 
 ### 🔴 Critical
-- **AX Tree Page Misidentification**: The page context extractor sometimes reads the wrong tab's AX tree or hallucinates page identity. Root cause: `chrome.tabs.query` from Side Panel context. **Fix applied** in Sprint 7 (`lastFocusedWindow` + HTTP filter) but **not yet verified by user**.
+- None currently.
 
 ### 🟡 Medium
-- **Gemini hallucination on complex pages**: Even with URL injection, Gemini 2.5 Flash may hallucinate content not in the AX tree. Mitigation: stronger system prompt added. Ultimate fix: use a better model (Gemini Pro, Claude Sonnet).
-- **Cost tracking UI not wired to actual usage**: The `done` chunk from providers doesn't currently include `metadata.usage` fields — adapters need to parse usage from final SSE events and include it.
-- **Provider Router not integrated**: `ProviderRouter` class exists but isn't wired into the service worker streams yet (currently uses direct adapter selection).
+- **AX Tree tab-targeting**: Fix applied (`lastFocusedWindow` + HTTP filter) but not yet verified by user in production.
+- **Gemini hallucination on complex pages**: Even with URL injection, Gemini 2.5 Flash may hallucinate content not in the AX tree. Use Gemini Pro or Claude Sonnet for complex pages.
 
 ### 🟢 Low
-- **No conversation history management**: All messages stored in a single flat array in `chrome.storage.local`. No multi-conversation support yet.
-- **Markdown renderer limitations**: No tables, no nested lists, no task lists. Code blocks don't have syntax highlighting.
-- **Agent action loop not closed**: The agent can extract the page and respond, but doesn't yet execute actions and re-observe in a loop.
+- **No multi-conversation support**: All messages in single flat array in `chrome.storage.local`. `conversationStore` Zustand exists but unused.
+- **Markdown renderer gaps**: No nested lists, no task lists (`- [ ]`), no syntax highlighting.
+- **Agent loop max steps**: Hard cap at 5 — may need tuning for complex multi-step tasks.
 
 ---
 
 ## 6. What to Build Next (Priority Order)
 
-### A. Close the Agent Loop (Sprint 8)
-The agent can see the page but can't act on it iteratively. Need:
-1. Parse tool calls from LLM response (JSON in markdown or function calling)
-2. Execute the action via CDP (`handleAgentAction`)
-3. Re-extract AX tree after action
-4. Feed result back to LLM
-5. Repeat until `done()` is called
+### ~~A. Close the Agent Loop~~ ✅ Sprint 8
+### ~~B. Wire Usage Metadata~~ ✅ Sprint 8
+### ~~C. Wire ProviderRouter~~ ✅ Sprint 8
+### ~~D. Markdown Tables/Blockquotes~~ ✅ Sprint 9
 
-### B. Wire Usage Metadata in Adapters (Sprint 8)
-Each adapter's `done` chunk should include token counts from the API response:
-- OpenAI: `usage` field in final SSE chunk
-- Anthropic: `message_delta` event with `usage`
-- Gemini: `usageMetadata` in response
-
-### C. Multi-Conversation Support (Sprint 9)
-- Conversation list in sidebar
+### E. Multi-Conversation Support (Sprint 10)
+- Adopt `conversationStore` in sidepanel.tsx
+- Conversation list drawer/sidebar
 - IndexedDB via Dexie.js for structured storage
-- Conversation search
+- Conversation search + auto-titling
 
-### D. Tauri Migration Prep (Sprint 10+)
+### F. Tauri Migration Prep (Sprint 11+)
 - The `native-bindings` package is a stub
 - Would implement IPC via Tauri commands, storage via Tauri's fs/store
 - CEF integration for full browser control (vs. extension CDP)

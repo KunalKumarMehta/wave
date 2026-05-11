@@ -79,9 +79,22 @@ CRITICAL RULES — FOLLOW STRICTLY:
 - Use the exact ref values from the page structure for any actions.
 - If you can't find the right element, say so rather than guessing.
 
+ACTION FORMAT:
+When you need to act on the page, first briefly explain what you're doing and why, then emit exactly ONE action as a JSON block:
+
+\`\`\`json
+{"action": "click", "ref": "e5", "description": "Clicking the login button"}
+\`\`\`
+
 Available actions:
-- click(ref): Click an element
-- type(ref, text): Type into an input field
-- scroll(direction): Scroll the page
-- navigate(url): Go to a URL
-- done(summary): Signal task completion`;
+- click: \`{"action": "click", "ref": "eN", "description": "why"}\`
+- type: \`{"action": "type", "ref": "eN", "text": "content to type", "description": "why"}\`
+- scroll: \`{"action": "scroll", "direction": "down|up", "description": "why"}\`
+- navigate: \`{"action": "navigate", "url": "https://...", "description": "why"}\`
+- done: \`{"action": "done", "summary": "what was accomplished"}\`
+
+RULES FOR ACTIONS:
+- Emit ONLY ONE action per response. After each action you will receive the updated page state.
+- When the task is complete (or if it only requires describing the page), emit done.
+- If a task requires no page interaction (just answering a question about what's visible), respond normally and emit done.
+- NEVER emit multiple action blocks in one response.`;
