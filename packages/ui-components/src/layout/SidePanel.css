@@ -68,6 +68,12 @@ body {
   flex-shrink: 0;
 }
 
+.side-panel__header-left {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .side-panel__logo {
   display: flex;
   align-items: center;

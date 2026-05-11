@@ -20,7 +20,7 @@ wave/
 │   ├── ui-components/   # React components (shared)
 │   │   ├── chat/          # InputBar, MessageList, MarkdownRenderer
 │   │   ├── generative/    # DataTable, GenericCard, ComponentRegistry
-│   │   └── layout/        # SidePanel, SettingsView, CostBadge
+│   │   └── layout/        # SidePanel, SettingsView, CostBadge, ConversationDrawer
 │   └── native-bindings/ # Tauri bindings (future)
 └── apps/
     └── extension/       # Chrome Extension entry (Vite + CRXJS)
@@ -68,6 +68,8 @@ pnpm test
 
 ### Chat
 - Multi-provider streaming (OpenAI, Anthropic, Gemini)
+- **Multi-conversation support** — create, switch, search, delete conversations
+- Conversation drawer with time-ago timestamps and auto-titling
 - Markdown rendering: code blocks, tables, blockquotes, ordered/unordered lists, horizontal rules
 - Auto-resizing input with Shift+Enter for newlines
 

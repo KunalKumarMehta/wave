@@ -4,12 +4,17 @@ import { PlatformProvider } from '@wave/ui-components';
 import { SidePanel } from '@wave/ui-components';
 import { ExtIPCProvider, ExtStorageProvider } from '@wave/ext-bindings';
 import { SettingsView } from '@wave/ui-components/src/layout/SettingsView.js';
+import { ConversationDrawer } from '@wave/ui-components/src/layout/ConversationDrawer.js';
 import { MessageList } from '@wave/ui-components/src/chat/MessageList.js';
 import { InputBar } from '@wave/ui-components/src/chat/InputBar.js';
 import type { UIProvider, Message } from '@wave/core';
 import type { ProviderName } from '@wave/core/src/state/settings.js';
 import { PROVIDER_CATALOG } from '@wave/core/src/state/settings.js';
 import { costTracker } from '@wave/core/src/domain/cost-tracker.js';
+import {
+  createConversationStorage,
+  type ConversationSummary,
+} from '@wave/core/src/domain/conversation-storage.js';
 import type { StreamChunk } from '@wave/core/src/types/stream.js';
 
 // ── Platform Bindings ───────────────────────────────────────────
@@ -24,6 +29,21 @@ const ui: UIProvider = {
     await chrome.tabs.create({ url });
   },
 };
+
+// ── Conversation Storage ────────────────────────────────────────
+
+const convStorage = createConversationStorage({
+  async get<T>(key: string): Promise<T | undefined> {
+    const result = await chrome.storage.local.get(key);
+    return result[key] as T | undefined;
+  },
+  async set(key: string, value: unknown): Promise<void> {
+    await chrome.storage.local.set({ [key]: value });
+  },
+  async delete(key: string): Promise<void> {
+    await chrome.storage.local.remove(key);
+  },
+});
 
 // ── Utility ─────────────────────────────────────────────────────
 
@@ -57,6 +77,7 @@ function useStreamHandler(
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>,
   setIsStreaming: React.Dispatch<React.SetStateAction<boolean>>,
   onCostUpdate: () => void,
+  activeConvIdRef: React.RefObject<string | null>,
 ) {
   const handleStreamMessages = useCallback(
     (assistantMsgId: string, port: chrome.runtime.Port, provider: string, model: string) => {
@@ -168,10 +189,17 @@ function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [activeProvider, setActiveProvider] = useState<ProviderName>('gemini');
   const [activeModel, setActiveModel] = useState(PROVIDER_CATALOG.gemini.defaultModel);
   const [totalCost, setTotalCost] = useState(0);
   const [totalTokens, setTotalTokens] = useState(0);
+  const [activeConvId, setActiveConvId] = useState<string | null>(null);
+  const [convList, setConvList] = useState<ConversationSummary[]>([]);
+
+  // Ref for stream handler to access current conversation ID
+  const activeConvIdRef = useRef<string | null>(null);
+  activeConvIdRef.current = activeConvId;
 
   const refreshCost = useCallback(() => {
     const summary = costTracker.getSummary();
@@ -179,40 +207,133 @@ function App() {
     setTotalTokens(summary.totalPromptTokens + summary.totalCompletionTokens);
   }, []);
 
-  const handleStreamMessages = useStreamHandler(setMessages, setIsStreaming, refreshCost);
+  const handleStreamMessages = useStreamHandler(setMessages, setIsStreaming, refreshCost, activeConvIdRef);
 
-  // Load saved settings + messages
-  useEffect(() => {
-    storage.config.get<string>('activeProvider').then((p) => {
-      if (p && p in PROVIDER_CATALOG) {
-        setActiveProvider(p as ProviderName);
-        storage.config.get<string>('activeModel').then((m) => {
-          setActiveModel(m ?? PROVIDER_CATALOG[p as ProviderName].defaultModel);
-        });
-      }
-    });
-    // Restore messages from last session
-    storage.config.get<Message[]>('messages').then((saved) => {
-      if (saved && saved.length > 0) {
-        // Clear any stuck streaming states
-        setMessages(saved.map((m) => ({ ...m, isStreaming: false })));
-      }
-    });
+  // Refresh conversation list from storage
+  const refreshConvList = useCallback(async () => {
+    const list = await convStorage.list();
+    setConvList(list);
   }, []);
 
-  // Persist messages on change
-  useEffect(() => {
-    if (messages.length > 0) {
-      storage.config.set('messages', messages);
+  // Load a conversation by ID
+  const loadConversation = useCallback(async (id: string) => {
+    const conv = await convStorage.get(id);
+    if (conv) {
+      setMessages(conv.messages.map((m) => ({ ...m, isStreaming: false })));
+      setActiveConvId(id);
     }
-  }, [messages]);
+  }, []);
 
-  const handleNewChat = useCallback(() => {
+  // Persist messages to active conversation (debounced via effect)
+  const persistTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!activeConvId || messages.length === 0) return;
+
+    // Debounce: persist 300ms after last message change
+    if (persistTimeoutRef.current) clearTimeout(persistTimeoutRef.current);
+    persistTimeoutRef.current = setTimeout(async () => {
+      const conv = await convStorage.get(activeConvId);
+      if (!conv) return;
+
+      // Full replace — simpler than diffing during streaming
+      const cleaned = messages.map((m) => ({ ...m, isStreaming: false }));
+      await chrome.storage.local.set({
+        [`conv_${activeConvId}`]: { ...conv, messages: cleaned, updatedAt: Date.now() },
+      });
+    }, 300);
+
+    return () => {
+      if (persistTimeoutRef.current) clearTimeout(persistTimeoutRef.current);
+    };
+  }, [messages, activeConvId]);
+
+  // Initialize: load settings + last conversation or create new
+  useEffect(() => {
+    (async () => {
+      // Load provider settings
+      const p = await storage.config.get<string>('activeProvider');
+      if (p && p in PROVIDER_CATALOG) {
+        setActiveProvider(p as ProviderName);
+        const m = await storage.config.get<string>('activeModel');
+        setActiveModel(m ?? PROVIDER_CATALOG[p as ProviderName].defaultModel);
+      }
+
+      // Load conversation list
+      const list = await convStorage.list();
+      setConvList(list);
+
+      // Load last active conversation or most recent
+      const lastActiveId = await storage.config.get<string>('activeConvId');
+
+      if (lastActiveId) {
+        const conv = await convStorage.get(lastActiveId);
+        if (conv) {
+          setMessages(conv.messages.map((m) => ({ ...m, isStreaming: false })));
+          setActiveConvId(lastActiveId);
+          return;
+        }
+      }
+
+      // Fallback: load most recent conversation
+      if (list.length > 0) {
+        const conv = await convStorage.get(list[0].id);
+        if (conv) {
+          setMessages(conv.messages.map((m) => ({ ...m, isStreaming: false })));
+          setActiveConvId(list[0].id);
+          await storage.config.set('activeConvId', list[0].id);
+          return;
+        }
+      }
+
+      // No conversations — create first one
+      const newId = await convStorage.create(activeProvider, activeModel);
+      setActiveConvId(newId);
+      setMessages([]);
+      await storage.config.set('activeConvId', newId);
+      await refreshConvList();
+    })();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Persist active conversation ID
+  useEffect(() => {
+    if (activeConvId) {
+      storage.config.set('activeConvId', activeConvId);
+    }
+  }, [activeConvId]);
+
+  const handleNewChat = useCallback(async () => {
+    const newId = await convStorage.create(activeProvider, activeModel);
+    setActiveConvId(newId);
     setMessages([]);
     costTracker.reset();
     refreshCost();
-    storage.config.delete('messages');
-  }, [refreshCost]);
+    await refreshConvList();
+  }, [activeProvider, activeModel, refreshCost, refreshConvList]);
+
+  const handleSelectConversation = useCallback(async (id: string) => {
+    await loadConversation(id);
+    costTracker.reset();
+    refreshCost();
+  }, [loadConversation, refreshCost]);
+
+  const handleDeleteConversation = useCallback(async (id: string) => {
+    await convStorage.delete(id);
+    await refreshConvList();
+
+    // If we deleted the active one, switch
+    if (id === activeConvId) {
+      const list = await convStorage.list();
+      if (list.length > 0) {
+        await loadConversation(list[0].id);
+      } else {
+        // Create fresh
+        const newId = await convStorage.create(activeProvider, activeModel);
+        setActiveConvId(newId);
+        setMessages([]);
+        await refreshConvList();
+      }
+    }
+  }, [activeConvId, activeProvider, activeModel, loadConversation, refreshConvList]);
 
   const handleProviderChange = useCallback((p: ProviderName) => {
     setActiveProvider(p);
@@ -232,6 +353,13 @@ function App() {
       return;
     }
 
+    // Ensure we have an active conversation
+    let convId = activeConvId;
+    if (!convId) {
+      convId = await convStorage.create(activeProvider, activeModel);
+      setActiveConvId(convId);
+    }
+
     const userMsg: Message = {
       id: generateId(),
       role: 'user',
@@ -249,6 +377,10 @@ function App() {
 
     setMessages((prev) => [...prev, userMsg, assistantMsg]);
     setIsStreaming(true);
+
+    // Persist user message + update title if first message
+    await convStorage.addMessage(convId, userMsg);
+    await refreshConvList();
 
     const isPageAware = isPageQuery(content);
 
@@ -311,13 +443,23 @@ function App() {
         },
       });
     }
-  }, [messages, activeProvider, activeModel, handleStreamMessages]);
+  }, [messages, activeProvider, activeModel, activeConvId, handleStreamMessages, refreshConvList]);
 
   return (
     <PlatformProvider ipc={ipc} storage={storage} ui={ui}>
+      <ConversationDrawer
+        conversations={convList}
+        activeConversationId={activeConvId}
+        isOpen={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        onSelect={handleSelectConversation}
+        onDelete={handleDeleteConversation}
+        onNewChat={handleNewChat}
+      />
       <SidePanel
         onSettingsClick={() => setSettingsOpen(!settingsOpen)}
         onNewChat={handleNewChat}
+        onHistoryClick={() => setDrawerOpen(true)}
         activeProvider={activeProvider}
         activeModel={activeModel}
         totalCost={totalCost}

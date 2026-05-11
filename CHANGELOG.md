@@ -86,3 +86,15 @@ All notable changes to Wave are documented here.
 - Ordered list support (`1. item` → `<ol>` with accent counters)
 - Blockquote rendering (`> text` → accent-bordered quote block)
 - Horizontal rule rendering (`---` → gradient accent line)
+
+## [0.3.0] — 2026-05-11
+
+### Added
+
+#### Multi-Conversation Support (Sprint 10)
+- `createConversationStorage()` — CRUD layer with index + per-conversation keys in `chrome.storage.local`
+- `ConversationDrawer` — slide-out panel with search, time-ago formatting, two-click delete confirmation
+- Conversation switching with active ID tracking and debounced persistence
+- Auto-titling from first user message (truncated to 60 chars)
+- History hamburger button in Side Panel header
+- 16 new unit tests for conversation storage (54 total)

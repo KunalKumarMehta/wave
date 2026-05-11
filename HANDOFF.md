@@ -1,8 +1,8 @@
 # Wave — Session Handoff Document
 
 > **Session Date:** 2026-05-10/11  
-> **Commits:** `a54b39e` → current (Sprint 1–9)  
-> **Status:** Agent loop functional — multi-step browser actions + auto-failover + rich markdown
+> **Commits:** `a54b39e` → current (Sprint 1–10)  
+> **Status:** Multi-conversation support — full CRUD, drawer UI, search, auto-titling
 
 ---
 
@@ -66,6 +66,13 @@
 - **Horizontal rules**: `---` → gradient accent line separator
 - **Agent action UI**: `⚡ Executing: click...` status during multi-step loops
 
+### Sprint 10 — Multi-Conversation Support
+- **Conversation storage layer**: `createConversationStorage()` with index + per-conversation keys
+- **ConversationDrawer**: slide-out panel with search, time-ago formatting, two-click delete
+- **Multi-conversation sidepanel**: conversation switching, auto-persistence, active ID tracking
+- **Auto-titling**: first user message → conversation title (truncated to 60 chars)
+- **16 unit tests**: create, list, addMessage, updateMessage, appendToMessage, delete, clear, search
+
 ---
 
 ## 2. Current File Structure
@@ -106,11 +113,12 @@ wave/                              # Root
 │   │   │   │   ├── ax-serializer.ts # AX tree → Markdown+refs (197 LOC)
 │   │   │   │   ├── context-builder.ts # Token budget allocation (133 LOC)
 │   │   │   │   ├── cost-tracker.ts # Per-model pricing (112 LOC)
+│   │   │   │   ├── conversation-storage.ts # Conversation CRUD layer (168 LOC)
 │   │   │   │   ├── provider-router.ts # Failover chain (133 LOC)
 │   │   │   │   └── stream-provider.ts # StreamAdapter interface
 │   │   │   ├── state/             # conversation.ts, settings.ts (Zustand)
 │   │   │   └── types/             # message.ts, stream.ts
-│   │   └── tests/                 # 38 vitest tests
+│   │   └── tests/                 # 54 vitest tests
 │   │
 │   ├── ext-bindings/              # Chrome Extension implementations
 │   │   └── src/
@@ -123,7 +131,7 @@ wave/                              # Root
 │   │   └── src/
 │   │       ├── chat/              # InputBar, MessageList, MarkdownRenderer
 │   │       ├── generative/        # DataTable, GenericCard, ComponentRegistry
-│   │       ├── layout/            # SidePanel, SettingsView, CostBadge
+│   │       ├── layout/            # SidePanel, SettingsView, CostBadge, ConversationDrawer
 │   │       └── context/           # PlatformContext (React context)
 │   │
 │   └── native-bindings/           # Tauri bindings (stub only)
@@ -180,7 +188,7 @@ pnpm test  # or: cd packages/core && npx vitest run
 - **Gemini hallucination on complex pages**: Even with URL injection, Gemini 2.5 Flash may hallucinate content not in the AX tree. Use Gemini Pro or Claude Sonnet for complex pages.
 
 ### 🟢 Low
-- **No multi-conversation support**: All messages in single flat array in `chrome.storage.local`. `conversationStore` Zustand exists but unused.
+- **No multi-conversation support**: ~~All messages in single flat array~~ **Fixed in Sprint 10**. Full conversation CRUD with drawer UI.
 - **Markdown renderer gaps**: No nested lists, no task lists (`- [ ]`), no syntax highlighting.
 - **Agent loop max steps**: Hard cap at 5 — may need tuning for complex multi-step tasks.
 
@@ -193,13 +201,15 @@ pnpm test  # or: cd packages/core && npx vitest run
 ### ~~C. Wire ProviderRouter~~ ✅ Sprint 8
 ### ~~D. Markdown Tables/Blockquotes~~ ✅ Sprint 9
 
-### E. Multi-Conversation Support (Sprint 10)
-- Adopt `conversationStore` in sidepanel.tsx
-- Conversation list drawer/sidebar
-- IndexedDB via Dexie.js for structured storage
-- Conversation search + auto-titling
+### ~~E. Multi-Conversation Support~~ ✅ Sprint 10
 
-### F. Tauri Migration Prep (Sprint 11+)
+### F. Enhanced Conversation Features (Sprint 11)
+- LLM-generated conversation titles (summarize first exchange)
+- Conversation export/import (JSON)
+- Conversation pinning + archiving
+- IndexedDB migration via Dexie.js (if storage limits hit)
+
+### G. Tauri Migration Prep (Sprint 12+)
 - The `native-bindings` package is a stub
 - Would implement IPC via Tauri commands, storage via Tauri's fs/store
 - CEF integration for full browser control (vs. extension CDP)

@@ -6,6 +6,7 @@ interface SidePanelProps {
   children: React.ReactNode;
   onSettingsClick?: () => void;
   onNewChat?: () => void;
+  onHistoryClick?: () => void;
   activeProvider?: string;
   activeModel?: string;
   totalCost?: number;
@@ -20,6 +21,7 @@ export function SidePanel({
   children,
   onSettingsClick,
   onNewChat,
+  onHistoryClick,
   activeProvider,
   activeModel,
   totalCost = 0,
@@ -28,9 +30,23 @@ export function SidePanel({
   return (
     <div className="side-panel">
       <header className="side-panel__header">
-        <div className="side-panel__logo">
-          <span className="side-panel__logo-icon">◉</span>
-          <span className="side-panel__logo-text">Wave</span>
+        <div className="side-panel__header-left">
+          {onHistoryClick && (
+            <button
+              className="side-panel__icon-btn"
+              onClick={onHistoryClick}
+              aria-label="Conversation history"
+              title="History"
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+            </button>
+          )}
+          <div className="side-panel__logo">
+            <span className="side-panel__logo-icon">◉</span>
+            <span className="side-panel__logo-text">Wave</span>
+          </div>
         </div>
         <div className="side-panel__header-right">
           {totalTokens > 0 && (
