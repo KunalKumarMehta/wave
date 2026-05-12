@@ -1,14 +1,13 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useCallback, useRef } from 'react';
 import { PlatformProvider, SidePanel, SettingsView } from '@wave/ui-components';
 import { InputBar } from '@wave/ui-components/src/chat/InputBar.js';
 import { MessageList } from '@wave/ui-components/src/chat/MessageList.js';
 import { ConversationDrawer } from '@wave/ui-components/src/layout/ConversationDrawer.js';
 import { NativeIPCProvider, NativeStorageProvider, NativeBrowserController } from '@wave/native-bindings';
-import type { ProviderName } from '@wave/core/src/state/settings.js';
-import { PROVIDER_CATALOG } from '@wave/core/src/state/settings.js';
+import { useConversationManager, generateId, isPageQuery, CHAT_SYSTEM_PROMPT, TITLE_SYSTEM_PROMPT } from '@wave/core';
 import type { Message } from '@wave/core';
 import { costTracker } from '@wave/core/src/domain/cost-tracker.js';
-import { createConversationStorage, type ConversationSummary } from '@wave/core/src/domain/conversation-storage.js';
+import { createConversationStorage } from '@wave/core/src/domain/conversation-storage.js';
 import { OpenAIAdapter } from '@wave/core/src/domain/adapters/openai.js';
 import { AnthropicAdapter } from '@wave/core/src/domain/adapters/anthropic.js';
 import { GeminiAdapter } from '@wave/core/src/domain/adapters/gemini.js';
@@ -17,6 +16,8 @@ import { runAgentLoop } from '@wave/core/src/domain/agent-loop.js';
 import { serializeAXTree } from '@wave/core/src/domain/ax-serializer.js';
 
 import './App.css';
+
+// ── Platform Bindings ───────────────────────────────────────────
 
 const ipc = new NativeIPCProvider();
 const storage = new NativeStorageProvider();
@@ -52,20 +53,6 @@ const convStorage = createConversationStorage({
     await storage.config.delete(key);
   },
 });
-
-function generateId(): string {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-}
-
-function isPageQuery(query: string): boolean {
-  const pageKeywords = [
-    'this page', 'this site', 'this tab', 'the page', 'current page',
-    'summarize', 'summarise', 'what is this', "what's on",
-    'click', 'type', 'fill', 'navigate', 'scroll',
-    'find on', 'read', 'extract', 'scrape',
-  ];
-  return pageKeywords.some((kw) => query.toLowerCase().includes(kw));
-}
 
 // ── CDP Operations ───────────────────────────────────────────────
 
@@ -146,151 +133,56 @@ async function handleAgentAction(tabId: number, action: string, params: Record<s
 // ── App Component ───────────────────────────────────────────────
 
 function App() {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [activeProvider, setActiveProvider] = useState<ProviderName>('gemini');
-  const [activeModel, setActiveModel] = useState(PROVIDER_CATALOG.gemini.defaultModel);
-  const [totalCost, setTotalCost] = useState(0);
-  const [totalTokens, setTotalTokens] = useState(0);
-  const [activeConvId, setActiveConvId] = useState<string | null>(null);
-  const [convList, setConvList] = useState<ConversationSummary[]>([]);
+  const mgr = useConversationManager({
+    convStorage,
+    configStorage: storage.config,
+  });
 
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  const refreshCost = useCallback(() => {
-    const summary = costTracker.getSummary();
-    setTotalCost(summary.totalCost);
-    setTotalTokens(summary.totalPromptTokens + summary.totalCompletionTokens);
-  }, []);
-
-  const refreshConvList = useCallback(async () => {
-    const list = await convStorage.list();
-    setConvList(list);
-  }, []);
-
-  const loadConversation = useCallback(async (id: string) => {
-    const conv = await convStorage.get(id);
-    if (conv) {
-      setMessages(conv.messages.map((m) => ({ ...m, isStreaming: false })));
-      setActiveConvId(id);
-    }
-  }, []);
-
-  useEffect(() => {
-    (async () => {
-      const p = await storage.config.get<string>('activeProvider');
-      if (p && p in PROVIDER_CATALOG) {
-        setActiveProvider(p as ProviderName);
-        const m = await storage.config.get<string>('activeModel');
-        setActiveModel(m ?? PROVIDER_CATALOG[p as ProviderName].defaultModel);
-      }
-      const list = await convStorage.list();
-      setConvList(list);
-      const lastActiveId = await storage.config.get<string>('activeConvId');
-      if (lastActiveId) {
-        const conv = await convStorage.get(lastActiveId);
-        if (conv) {
-          setMessages(conv.messages.map((m) => ({ ...m, isStreaming: false })));
-          setActiveConvId(lastActiveId);
-          return;
-        }
-      }
-      if (list.length > 0) {
-        const conv = await convStorage.get(list[0].id);
-        if (conv) {
-          setMessages(conv.messages.map((m) => ({ ...m, isStreaming: false })));
-          setActiveConvId(list[0].id);
-          await storage.config.set('activeConvId', list[0].id);
-          return;
-        }
-      }
-      const newId = await convStorage.create(activeProvider, activeModel);
-      setActiveConvId(newId);
-      setMessages([]);
-      await storage.config.set('activeConvId', newId);
-      await refreshConvList();
-    })();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (activeConvId) storage.config.set('activeConvId', activeConvId);
-  }, [activeConvId]);
-
-  const handleNewChat = useCallback(async () => {
-    const newId = await convStorage.create(activeProvider, activeModel);
-    setActiveConvId(newId);
-    setMessages([]);
-    costTracker.reset();
-    refreshCost();
-    await refreshConvList();
-  }, [activeProvider, activeModel, refreshCost, refreshConvList]);
-
-  const handleSelectConversation = useCallback(async (id: string) => {
-    await loadConversation(id);
-    costTracker.reset();
-    refreshCost();
-  }, [loadConversation, refreshCost]);
-
-  const handleDeleteConversation = useCallback(async (id: string) => {
-    await convStorage.delete(id);
-    await refreshConvList();
-    if (id === activeConvId) {
-      const list = await convStorage.list();
-      if (list.length > 0) await loadConversation(list[0].id);
-      else {
-        const newId = await convStorage.create(activeProvider, activeModel);
-        setActiveConvId(newId);
-        setMessages([]);
-        await refreshConvList();
-      }
-    }
-  }, [activeConvId, activeProvider, activeModel, loadConversation, refreshConvList]);
-
   const handleSend = useCallback(async (content: string) => {
-    const apiKey = await storage.secure.getSecret(`apikey_${activeProvider}`);
+    const apiKey = await storage.secure.getSecret(`apikey_${mgr.activeProvider}`);
     if (!apiKey) {
-      setSettingsOpen(true);
+      mgr.setSettingsOpen(true);
       return;
     }
 
-    let convId = activeConvId;
+    let convId = mgr.activeConvId;
     if (!convId) {
-      convId = await convStorage.create(activeProvider, activeModel);
-      setActiveConvId(convId);
+      convId = await convStorage.create(mgr.activeProvider, mgr.activeModel);
     }
 
     const userMsg: Message = { id: generateId(), role: 'user', content, timestamp: Date.now() };
     const assistantMsg: Message = { id: generateId(), role: 'assistant', content: '', timestamp: Date.now(), isStreaming: true };
 
-    setMessages((prev) => [...prev, userMsg, assistantMsg]);
-    setIsStreaming(true);
+    mgr.setMessages((prev) => [...prev, userMsg, assistantMsg]);
+    mgr.setIsStreaming(true);
 
+    // Persist user message
     const isFirstMessage = (await convStorage.get(convId))?.messages.length === 0;
     await convStorage.addMessage(convId, userMsg);
-    await refreshConvList();
+    await mgr.refreshConvList();
 
+    // Auto-title via LLM on first message
     if (isFirstMessage) {
-      // Inline title generation
-      const adapter = adapters[activeProvider];
+      const adapter = adapters[mgr.activeProvider];
       if (adapter) {
         try {
           let generatedTitle = '';
           await adapter.stream({
-            model: activeModel,
+            model: mgr.activeModel,
             messages: [
-              { role: 'system', content: 'Summarize the user prompt into a short 3-5 word title. Output ONLY the title, no quotes.' },
+              { role: 'system', content: TITLE_SYSTEM_PROMPT },
               { role: 'user', content }
             ]
           }, { apiKey }, (chunk: any) => {
             if (chunk.type === 'text_delta') generatedTitle += chunk.content;
           }, new AbortController().signal);
-          
+
           const finalTitle = generatedTitle.replace(/["']/g, '').trim().slice(0, 60);
           if (finalTitle) {
             await convStorage.updateMeta(convId!, { title: finalTitle });
-            await refreshConvList();
+            await mgr.refreshConvList();
           }
         } catch (e) {
           console.error("Failed to generate title", e);
@@ -304,141 +196,115 @@ function App() {
       if (isPageQuery(content)) {
         const targets = await cdp.getTargets();
         const tab = targets.find((t) => t.type === 'tab');
-        
+
         if (!tab) {
-          setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, content: 'Error: No active debuggable tab found. Ensure Chrome is running with --remote-debugging-port=9222', isStreaming: false } : m));
-          setIsStreaming(false);
+          mgr.setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, content: 'Error: No active debuggable tab found. Ensure Chrome is running with --remote-debugging-port=9222', isStreaming: false } : m));
+          mgr.setIsStreaming(false);
           return;
         }
 
         await runAgentLoop({
           maxSteps: 5,
-          adapter: adapters[activeProvider],
+          adapter: adapters[mgr.activeProvider],
           apiKey,
-          model: activeModel,
+          model: mgr.activeModel,
           tabId: Number(tab.id),
           query: content,
-          history: messages.slice(-6).map((m) => ({ role: m.role as any, content: m.content })),
+          history: mgr.messages.slice(-6).map((m) => ({ role: m.role as any, content: m.content })),
           onChunk: (chunk: any) => {
             if (chunk.type === 'text_delta') {
-              setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, content: m.content.startsWith('🔍') || m.content.startsWith('🧠') ? chunk.content : m.content + chunk.content } : m));
+              mgr.setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, content: m.content.startsWith('🔍') || m.content.startsWith('🧠') ? chunk.content : m.content + chunk.content } : m));
             } else if (chunk.type === 'done' && chunk.metadata?.usage) {
-              costTracker.record({ provider: activeProvider, model: activeModel, promptTokens: chunk.metadata.usage.promptTokens ?? 0, completionTokens: chunk.metadata.usage.completionTokens ?? 0, timestamp: Date.now() });
-              refreshCost();
+              costTracker.record({ provider: mgr.activeProvider, model: mgr.activeModel, promptTokens: chunk.metadata.usage.promptTokens ?? 0, completionTokens: chunk.metadata.usage.completionTokens ?? 0, timestamp: Date.now() });
+              mgr.refreshCost();
             }
           },
           onStatus: (status: string, data?: any) => {
             const statusText = status === 'extracting_page' ? '🔍 Reading page structure...' : status === 'thinking' ? '🧠 Analyzing page...' : status === 'executing_action' ? `⚡ Executing: ${data?.action ?? 'action'}...` : '';
-            if (statusText) setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, content: statusText } : m));
+            if (statusText) mgr.setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, content: statusText } : m));
           },
           onAction: (action: string, params: any) => handleAgentAction(Number(tab.id), action, params),
           getPageContext: (tid: number) => getPageContext(tid),
           signal: abortControllerRef.current.signal,
         });
-
       } else {
-        const routes: ProviderRoute[] = [{ provider: activeProvider, adapter: adapters[activeProvider], apiKey }];
+        const routes: ProviderRoute[] = [{ provider: mgr.activeProvider, adapter: adapters[mgr.activeProvider], apiKey }];
         const router = new ProviderRouter({ routes, maxRetries: 1 });
-        
+
         await router.stream({
-          model: activeModel,
+          model: mgr.activeModel,
           messages: [
-            { role: 'system', content: 'You are Wave, an AI browser assistant. Be concise, helpful, and precise.' },
-            ...messages.slice(-10).map((m) => ({ role: m.role as any, content: m.content })),
+            { role: 'system', content: CHAT_SYSTEM_PROMPT },
+            ...mgr.messages.slice(-10).map((m) => ({ role: m.role as any, content: m.content })),
             { role: 'user', content }
           ]
         }, (chunk: any) => {
           if (chunk.type === 'text_delta') {
-            setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, content: m.content + chunk.content } : m));
+            mgr.setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, content: m.content + chunk.content } : m));
           } else if (chunk.type === 'error') {
-            setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, content: `Error: ${chunk.content}`, isStreaming: false } : m));
+            mgr.setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, content: `Error: ${chunk.content}`, isStreaming: false } : m));
           } else if (chunk.type === 'done' && chunk.metadata?.usage) {
-            costTracker.record({ provider: activeProvider, model: activeModel, promptTokens: chunk.metadata.usage.promptTokens ?? 0, completionTokens: chunk.metadata.usage.completionTokens ?? 0, timestamp: Date.now() });
-            refreshCost();
+            costTracker.record({ provider: mgr.activeProvider, model: mgr.activeModel, promptTokens: chunk.metadata.usage.promptTokens ?? 0, completionTokens: chunk.metadata.usage.completionTokens ?? 0, timestamp: Date.now() });
+            mgr.refreshCost();
           }
         }, abortControllerRef.current.signal);
       }
 
-      setMessages((prev) => {
+      // Finalize message
+      mgr.setMessages((prev) => {
         const updated = prev.map((m) => m.id === assistantMsg.id ? { ...m, isStreaming: false } : m);
         const finalMsg = updated.find(m => m.id === assistantMsg.id);
         if (finalMsg && convId) convStorage.addMessage(convId, finalMsg);
         return updated;
       });
-      setIsStreaming(false);
+      mgr.setIsStreaming(false);
 
     } catch (err: any) {
-      setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, content: `Error: ${err.message}`, isStreaming: false } : m));
-      setIsStreaming(false);
+      mgr.setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, content: `Error: ${err.message}`, isStreaming: false } : m));
+      mgr.setIsStreaming(false);
     }
-  }, [messages, activeProvider, activeModel, activeConvId, refreshConvList, refreshCost]);
+  }, [mgr]);
 
   return (
     <PlatformProvider ipc={ipc} storage={storage} ui={ui}>
       <ConversationDrawer
-        conversations={convList}
-        activeConversationId={activeConvId}
-        isOpen={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        onSelect={handleSelectConversation}
-        onDelete={handleDeleteConversation}
-        onTogglePin={async (id) => { await convStorage.togglePin(id); refreshConvList(); }}
-        onNewChat={handleNewChat}
-        onExportAll={async () => {
-          const json = await convStorage.exportAll();
-          const blob = new Blob([json], { type: 'application/json' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `wave_conversations_${new Date().toISOString().split('T')[0]}.json`;
-          a.click();
-          URL.revokeObjectURL(url);
-        }}
-        onImportAll={() => {
-          const input = document.createElement('input');
-          input.type = 'file';
-          input.accept = 'application/json';
-          input.onchange = async (e) => {
-            const file = (e.target as HTMLInputElement).files?.[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = async (evt) => {
-              if (typeof evt.target?.result === 'string') {
-                await convStorage.importAll(evt.target.result);
-                refreshConvList();
-              }
-            };
-            reader.readAsText(file);
-          };
-          input.click();
-        }}
+        conversations={mgr.convList}
+        activeConversationId={mgr.activeConvId}
+        isOpen={mgr.drawerOpen}
+        onClose={() => mgr.setDrawerOpen(false)}
+        onSelect={mgr.handleSelectConversation}
+        onDelete={mgr.handleDeleteConversation}
+        onTogglePin={mgr.handleTogglePin}
+        onNewChat={mgr.handleNewChat}
+        onExportAll={mgr.handleExportAll}
+        onImportAll={mgr.handleImportAll}
       />
       <SidePanel
-        onSettingsClick={() => setSettingsOpen(!settingsOpen)}
-        onNewChat={handleNewChat}
-        onHistoryClick={() => setDrawerOpen(true)}
-        activeProvider={activeProvider}
-        activeModel={activeModel}
-        totalCost={totalCost}
-        totalTokens={totalTokens}
+        onSettingsClick={() => mgr.setSettingsOpen(!mgr.settingsOpen)}
+        onNewChat={mgr.handleNewChat}
+        onHistoryClick={() => mgr.setDrawerOpen(true)}
+        activeProvider={mgr.activeProvider}
+        activeModel={mgr.activeModel}
+        totalCost={mgr.totalCost}
+        totalTokens={mgr.totalTokens}
       >
-        {settingsOpen ? (
+        {mgr.settingsOpen ? (
           <SettingsView
-            activeProvider={activeProvider}
-            activeModel={activeModel}
-            onProviderChange={(p) => { setActiveProvider(p); setActiveModel(PROVIDER_CATALOG[p].defaultModel); storage.config.set('activeProvider', p); }}
-            onModelChange={(m) => { setActiveModel(m); storage.config.set('activeModel', m); }}
-            onClose={() => setSettingsOpen(false)}
+            activeProvider={mgr.activeProvider}
+            activeModel={mgr.activeModel}
+            onProviderChange={mgr.handleProviderChange}
+            onModelChange={mgr.handleModelChange}
+            onClose={() => mgr.setSettingsOpen(false)}
           />
         ) : (
-          <MessageList messages={messages} />
+          <MessageList messages={mgr.messages} />
         )}
       </SidePanel>
-      {!settingsOpen && (
+      {!mgr.settingsOpen && (
         <InputBar
           onSend={handleSend}
-          disabled={isStreaming}
-          placeholder={isStreaming ? 'Wave is thinking...' : undefined}
+          disabled={mgr.isStreaming}
+          placeholder={mgr.isStreaming ? 'Wave is thinking...' : undefined}
         />
       )}
     </PlatformProvider>
