@@ -1,7 +1,7 @@
 # PRD: Wave — AI-Native Browser
 
-> **Version:** 0.2 (Updated 2026-05-11)  
-> **Status:** MVP Phase (Chrome Extension) — Sprints 1–7 complete
+> **Version:** 0.3 (Updated 2026-05-12)  
+> **Status:** Sprint 14 complete — Extension MVP + Tauri Desktop scaffold
 
 ---
 
@@ -10,9 +10,9 @@
 Build an AI-native browser where artificial intelligence is the core interaction layer. The browser understands pages, takes actions, and generates rich UI — moving beyond static DOM rendering to an intelligent, agent-powered experience.
 
 ### Phased Approach
-1. **Phase 1 (Current):** Chrome Extension MVP — Side Panel AI assistant with page awareness
-2. **Phase 2:** Multi-step agent loop — click, type, navigate autonomously
-3. **Phase 3:** Tauri + CEF native shell — full browser with embedded AI
+1. **Phase 1 ✅:** Chrome Extension MVP — Side Panel AI assistant with page awareness + agent loop
+2. **Phase 2 ✅:** Multi-conversation, provider failover, Tauri desktop scaffold
+3. **Phase 3 (Current):** Embedded browser view, local LLM, Chrome Web Store release
 
 ---
 
@@ -20,15 +20,17 @@ Build an AI-native browser where artificial intelligence is the core interaction
 
 | Objective | Target | Status |
 |-----------|--------|--------|
-| Multi-provider streaming | OpenAI, Anthropic, Gemini | ✅ Done |
-| Page awareness via AX tree | Extract + serialize page structure | ✅ Done |
-| Agent actions via CDP | Click, type, scroll, navigate | ✅ Built (not looped) |
-| Generative UI components | DataTable, GenericCard, Markdown | ✅ Done |
-| Cost tracking + failover | Per-model pricing, auto-retry | ✅ Done |
-| Multi-step agent loop | Observe → Act → Re-observe cycle | 🔲 Sprint 8 |
-| Conversation persistence | Multi-conversation + search | 🔲 Sprint 9 |
-| Local LLM inference | WebGPU-based SLM for routing | 🔲 Phase 3 |
-| Native browser shell | Tauri + CEF with embedded rendering | 🔲 Phase 3 |
+| Multi-provider streaming | OpenAI, Anthropic, Gemini | ✅ Done (Sprint 2) |
+| Page awareness via AX tree | Extract + serialize page structure | ✅ Done (Sprint 4) |
+| Agent actions via CDP | Click, type, scroll, navigate | ✅ Done (Sprint 5) |
+| Multi-step agent loop | Observe → Act → Re-observe cycle | ✅ Done (Sprint 8) |
+| Provider failover | Auto-retry on 429/5xx | ✅ Wired (Sprint 8) |
+| Generative UI components | DataTable, GenericCard, Markdown | ✅ Done (Sprint 3) |
+| Cost tracking | Per-model pricing, budget enforcement | ✅ Done (Sprint 6) |
+| Multi-conversation | Full CRUD, drawer, search, pin | ✅ Done (Sprint 10-11) |
+| Tauri desktop scaffold | Native app with system tray + shortcuts | ✅ Done (Sprint 12-14) |
+| Embedded browser view | Webview inside Tauri app | 🔲 Sprint 17 |
+| Local LLM inference | WebGPU SLM for intent routing | 🔲 Sprint 20 |
 
 ---
 
@@ -36,24 +38,24 @@ Build an AI-native browser where artificial intelligence is the core interaction
 
 ### 3.1. AI Chat Assistant ✅
 - Real-time streaming responses from 3 cloud providers
-- Markdown rendering: code blocks (with copy), headings, lists, bold/italic/links
-- Conversation persistence across Side Panel reopens
-- New Chat button to reset context
-- Token count + cost tracking in header
+- Markdown rendering: code blocks (with copy), headings, lists, tables, blockquotes, horizontal rules
+- Multi-conversation support with auto-titling via LLM
+- Conversation drawer with search, pinning, export/import
+- New Chat button, cost badge, model indicator
 
 ### 3.2. Page Awareness ✅
-- Automatic detection of page-aware queries ("summarize this page", "what's on this page")
+- Automatic detection of page-aware queries (keyword matching)
 - Chrome DevTools Protocol extraction of accessibility tree
 - AX tree → Markdown+refs serialization (~93% token reduction)
 - Priority-based context builder with token budget (8192 tokens)
 - Page URL + title injected to prevent hallucination
 
-### 3.3. Agent Actions ✅ (One-Shot)
-- `click(ref)` — Click elements by accessibility ref
-- `type(ref, text)` — Type into input fields
-- `scroll(direction)` — Scroll the page
-- `navigate(url)` — Navigate to URLs
-- `done(summary)` — Signal task completion
+### 3.3. Agent Loop ✅ (Multi-Step)
+- **Observe → Think → Act → Re-observe** state machine (max 5 steps)
+- Tool call parser: JSON blocks + inline `ACTION:` fallback
+- Action execution via CDP with page re-extraction between steps
+- Available actions: `click(ref)`, `type(ref, text)`, `scroll(direction)`, `navigate(url)`, `done(summary)`
+- Status indicators: 🔍 Reading, 🧠 Analyzing, ⚡ Executing
 
 ### 3.4. Generative UI Components ✅
 - `DataTable` — Structured data with sortable columns
@@ -67,24 +69,30 @@ Build an AI-native browser where artificial intelligence is the core interaction
 - API key entry with session-based secure storage
 - Persistent provider/model selection
 
-### 3.6. Multi-Step Agent Loop 🔲 (Sprint 8)
-- Parse LLM tool calls from response
-- Execute action via CDP
-- Re-extract AX tree after page mutation
-- Feed result back to LLM
-- Repeat until `done()` is called
-- Human-in-the-loop confirmation for destructive actions
+### 3.6. Multi-Conversation ✅
+- Conversation list in slide-out drawer
+- chrome.storage.local persistence (Extension) / Tauri Store (Desktop)
+- Full-text search across conversation titles
+- Pinning, export/import, two-click delete
+- LLM-generated titles from first user message
 
-### 3.7. Multi-Conversation 🔲 (Sprint 9)
-- Conversation list in sidebar
-- IndexedDB storage via Dexie.js
-- Full-text search across conversations
-- Export/import conversations
+### 3.7. Desktop Application ✅ (Scaffold)
+- Tauri v2 native app with React frontend
+- System tray icon with click-to-toggle visibility
+- Global keyboard shortcut: `Cmd+Shift+Space`
+- Native storage via `tauri-plugin-store`
+- CDP via WebSocket to Chrome `--remote-debugging-port=9222`
 
-### 3.8. Local LLM Router 🔲 (Phase 3)
-- WebGPU-based SLM for intent classification
-- Instant routing decision (page query vs. general chat)
-- Offline capability for basic tasks
+### 3.8. Embedded Browser View 🔲 (Sprint 17)
+- Tauri WebviewWindow for managed browser pane
+- Split-pane layout: browser view + chat sidebar
+- Auto-attach CDP to managed webview
+- No requirement for external Chrome instance
+
+### 3.9. Local LLM Router 🔲 (Sprint 20)
+- WebGPU inference via WebLLM
+- Intent classification (page query vs. general chat)
+- Offline auto-titling (replaces cloud LLM call)
 
 ---
 
@@ -92,11 +100,11 @@ Build an AI-native browser where artificial intelligence is the core interaction
 
 | Constraint | Requirement |
 |-----------|-------------|
-| **Platform** | Chrome 116+ (Side Panel API), MV3 service worker |
-| **Security** | API keys in session storage only (ephemeral). CDP access shows visible banner. |
-| **Performance** | Side Panel bundle < 250KB gzipped. Service worker < 20KB. |
-| **Privacy** | No telemetry. All data stays in browser storage. API keys never leave the device except to the chosen provider. |
-| **Permissions** | activeTab, tabs, debugger, sidePanel, storage (minimal viable set) |
+| **Extension** | Chrome 116+ (Side Panel API), MV3 service worker |
+| **Desktop** | macOS 12+, Windows 10+, Linux (Tauri v2 targets) |
+| **Security** | API keys in session/ephemeral storage only. CDP shows visible banner. |
+| **Performance** | Extension bundle < 250KB gzip. Desktop < 5MB installed. |
+| **Privacy** | No telemetry. All data local. Keys never persisted to disk. |
 
 ---
 
@@ -104,8 +112,10 @@ Build an AI-native browser where artificial intelligence is the core interaction
 
 | Metric | Target | Current |
 |--------|--------|---------|
-| Time to first token (streaming) | < 500ms | ~800ms (Gemini) |
-| AX tree extraction time | < 200ms | ~150ms |
-| Side Panel CSS bundle | < 15KB | 12.7KB |
-| Test coverage (core) | > 80% | 23 tests (key modules) |
+| Time to first token | < 500ms | ~800ms (Gemini) |
+| AX tree extraction | < 200ms | ~150ms |
+| Extension CSS bundle | < 20KB | 20.2KB |
+| Test coverage (core) | > 80% | 54 tests (5 suites) |
 | Provider support | 3+ | 3 (OpenAI, Anthropic, Gemini) |
+| Agent loop steps | Up to 5 | Configurable, default 5 |
+| Platforms | 2 | 2 (Extension + Desktop) |
