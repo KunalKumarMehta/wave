@@ -89,6 +89,11 @@
 - **Rust Plugin Registration**: Registered `tauri-plugin-store` in the Rust backend and granted explicit capabilities in `default.json`.
 - **Frontend Port**: Replaced the default Vite scaffold with the Wave `SidePanel` component using the new native providers.
 
+### Sprint 14 — Native Agent Loop Implementation
+- **Native BrowserController**: Configured CDP interface using WebSockets over port `9222` to interface with the Chromium debugging API seamlessly.
+- **Ported Service Worker**: Moved the entire `runAgentLoop` and Provider orchestration directly into `App.tsx`, bypassing the need for Chrome Ports and completely deprecating the Extension `background.ts` service worker architecture in the Tauri desktop environment.
+- **Native OS Integrations**: Included `tauri-plugin-global-shortcut` and `tauri::tray::TrayIconBuilder` to add a global show/hide hotkey (`Cmd+Shift+Space`) and a persistent system tray icon with visibility toggling.
+
 ---
 
 ## 2. Current File Structure
@@ -231,10 +236,10 @@ pnpm test  # or: cd packages/core && npx vitest run
 - Configured `tauri.conf.json` with correct window dimensions and CSP
 - Registered `tauri-plugin-store` in `lib.rs` and granted capabilities in `default.json`
 
-### I. Native Agent Loop Implementation (Sprint 14+)
-- Implement native `BrowserController` logic using WebView2/CEF remote debugging
-- Port `background.ts` service worker logic into Rust commands
-- Add native tray icon and system-level shortcuts
+### ~~I. Native Agent Loop Implementation~~ ✅ Sprint 14
+- Implemented native `BrowserController` logic using CDP via WebSockets to `localhost:9222`
+- Ported `background.ts` logic seamlessly into `App.tsx` natively replacing chrome ports
+- Added native system tray icon and global shortcuts (Cmd+Shift+Space) via Tauri plugins
 
 ---
 

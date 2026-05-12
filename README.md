@@ -21,9 +21,13 @@ wave/
 │   │   ├── chat/          # InputBar, MessageList, MarkdownRenderer
 │   │   ├── generative/    # DataTable, GenericCard, ComponentRegistry
 │   │   └── layout/        # SidePanel, SettingsView, CostBadge, ConversationDrawer
-│   └── native-bindings/ # Tauri bindings (future)
+│   └── native-bindings/ # Tauri Desktop implementations
+│       ├── cdp.ts         # WebSocket CDP wrapper for localhost:9222
+│       ├── ipc.ts         # Tauri IPC wrapper
+│       └── storage.ts     # tauri-plugin-store wrapper
 └── apps/
-    └── extension/       # Chrome Extension entry (Vite + CRXJS)
+    ├── extension/       # Chrome Extension entry (Vite + CRXJS)
+    └── desktop/         # Tauri Desktop App (Vite + React + Rust)
 ```
 
 ## Quick Start
@@ -44,6 +48,9 @@ pnpm install
 
 # Build the extension
 pnpm --filter @wave/extension build
+
+# Build the desktop app
+pnpm --filter @wave/desktop build
 
 # Run tests
 pnpm test
@@ -76,7 +83,7 @@ pnpm test
 ### Browser Agent
 - Ask "What's on this page?" to extract the accessibility tree
 - Multi-step actions: "Click login, then enter my email" → observe → act → repeat
-- Uses Chrome DevTools Protocol (CDP) via `chrome.debugger`
+- Uses Chrome DevTools Protocol (CDP) via `chrome.debugger` (extension) or `localhost:9222` WebSocket (desktop)
 - AX tree → Markdown+refs serialization (~93% token reduction)
 - Priority-based context builder with 8192-token budget
 
@@ -93,9 +100,11 @@ pnpm test
 
 ## Development
 
-```bash
-# Dev mode with hot reload
+# Dev mode with hot reload (Extension)
 pnpm --filter @wave/extension dev
+
+# Dev mode (Desktop - runs Tauri and Vite)
+cd apps/desktop && pnpm tauri dev
 
 # Type check all packages
 pnpm -r exec tsc --noEmit
@@ -108,12 +117,12 @@ pnpm test
 
 | Layer | Technology |
 |-------|-----------|
-| Runtime | Chrome Extension MV3 (Service Worker) |
-| Build | Vite + CRXJS |
+| Runtime | Chrome Extension MV3 / Tauri v2 Desktop |
+| Build | Vite + CRXJS (Ext) / Vite + tauri-build (Desktop) |
 | UI | React 19 + vanilla CSS |
 | State | Zustand |
 | Streaming | Fetch + ReadableStream (SSE parsing) |
-| Security | Web Crypto API (AES-256-GCM) |
+| Security | Web Crypto API / Tauri Plugin Store |
 | Page Access | Chrome DevTools Protocol (CDP 1.3) |
 | Monorepo | pnpm workspaces |
 
