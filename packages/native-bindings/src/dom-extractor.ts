@@ -117,7 +117,7 @@ export const wrapScriptForResult = (script: string, requestId: string) => `
 (async function() {
   try {
     const result = await (async () => { 
-      ${script} 
+      return ${script} 
     })();
     const payload = JSON.stringify({ requestId: '${requestId}', result });
     if (window.ipc && window.ipc.postMessage) {

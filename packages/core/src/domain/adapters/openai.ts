@@ -30,7 +30,22 @@ export class OpenAIAdapter implements StreamAdapter {
       },
       body: JSON.stringify({
         model: request.model,
-        messages: request.messages,
+        messages: request.messages.map(m => {
+          if (Array.isArray(m.content)) {
+            return {
+              role: m.role,
+              content: m.content.map(c => {
+                if (c.type === 'text') return { type: 'text', text: c.text };
+                if (c.type === 'image') return { 
+                  type: 'image_url', 
+                  image_url: { url: `data:${c.mimeType || 'image/png'};base64,${c.data}` } 
+                };
+                return c;
+              })
+            };
+          }
+          return m;
+        }),
         max_tokens: request.maxTokens ?? 4096,
         temperature: request.temperature ?? 0.7,
         stream: true,

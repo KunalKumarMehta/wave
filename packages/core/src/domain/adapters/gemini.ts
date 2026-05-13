@@ -30,10 +30,25 @@ export class GeminiAdapter implements StreamAdapter {
     const chatMessages = request.messages.filter((m) => m.role !== 'system');
 
     // Gemini requires alternating user/model roles, starting with user
-    const contents = chatMessages.map((m) => ({
-      role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: m.content }],
-    }));
+    const contents = chatMessages.map((m) => {
+      let parts: any[] = [];
+      if (Array.isArray(m.content)) {
+        parts = m.content.map(c => {
+          if (c.type === 'text') return { text: c.text };
+          if (c.type === 'image') return { 
+            inlineData: { mimeType: c.mimeType || 'image/png', data: c.data } 
+          };
+          return c;
+        });
+      } else {
+        parts = [{ text: m.content }];
+      }
+
+      return {
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts,
+      };
+    });
 
     const body: Record<string, unknown> = {
       contents,

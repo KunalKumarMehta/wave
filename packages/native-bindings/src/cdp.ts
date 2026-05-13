@@ -103,6 +103,7 @@ export class NativeBrowserController implements BrowserController {
   }
 
   async extractPageContextFromWebview(_label: string = 'browser'): Promise<PageContext> {
+    console.log('[Wave] extractPageContextFromWebview called');
     const requestId = Math.random().toString(36).substring(7);
     const wrappedScript = wrapScriptForResult(DOM_EXTRACTOR_SCRIPT, requestId);
 
@@ -142,7 +143,8 @@ export class NativeBrowserController implements BrowserController {
             }
           }
         } catch (e) {
-          // ignore parsing errors
+          console.error('[Wave] DOM extraction listener error:', e);
+          reject(e);
         }
       });
 
@@ -193,5 +195,68 @@ export class NativeBrowserController implements BrowserController {
 
       invoke('eval_browser', { js: wrappedScript }).catch(reject);
     });
+  }
+
+  async captureScreenshot(target?: TargetIdentifier): Promise<string> {
+    if (target?.id === 'browser' || (!target && !this.ws)) {
+      // Embedded webview fallback: try to capture canvas or just return empty for now
+      // Actually, the prompt suggests using eval to capture canvas
+      const script = `
+        (function() {
+          const canvas = document.querySelector('canvas');
+          if (!canvas) return '';
+          const maxW = 1024;
+          const maxH = 768;
+          let w = canvas.width;
+          let h = canvas.height;
+          if (w > maxW || h > maxH) {
+            const ratio = Math.min(maxW / w, maxH / h);
+            w *= ratio;
+            h *= ratio;
+          }
+          const tmp = document.createElement('canvas');
+          tmp.width = w;
+          tmp.height = h;
+          const ctx = tmp.getContext('2d');
+          if (ctx) ctx.drawImage(canvas, 0, 0, w, h);
+          return tmp.toDataURL('image/png');
+        })()
+      `;
+      const requestId = Math.random().toString(36).substring(7);
+      const wrappedScript = wrapScriptForResult(script, requestId);
+
+      return new Promise(async (resolve, reject) => {
+        let unlistenFn: (() => void) | undefined;
+        const timeout = setTimeout(() => {
+          if (unlistenFn) unlistenFn();
+          reject(new Error('Screenshot capture timed out'));
+        }, 5000);
+
+        unlistenFn = await listen('browser-ipc', (event: any) => {
+          try {
+            const payload = typeof event.payload === 'string' ? JSON.parse(event.payload) : event.payload;
+            if (payload.requestId === requestId) {
+              clearTimeout(timeout);
+              if (unlistenFn) unlistenFn();
+              if (payload.error) reject(new Error(payload.error));
+              else {
+                // Return just the base64 part
+                const dataUrl = payload.result || '';
+                resolve(dataUrl.split(',')[1] || '');
+              }
+            }
+          } catch (e) {}
+        });
+
+        invoke('eval_browser', { js: wrappedScript }).catch(reject);
+      });
+    }
+
+    // External Chrome via CDP
+    const result = await this.sendCommand<any>(target!, 'Page.captureScreenshot', {
+      format: 'png',
+      quality: 80,
+    });
+    return result.data;
   }
 }

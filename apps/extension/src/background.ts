@@ -374,7 +374,8 @@ function handleAgentStream(port: chrome.runtime.Port) {
             status === 'extracting_page' ? '🔍 Reading page structure...' : 
             status === 'thinking' ? '🧠 Analyzing page...' : 
             status === 'executing_action' ? `⚡ Executing: ${data?.action ?? 'action'}...` :
-            status === 'navigating' ? '⏳ Waiting for page to load...' : '';
+            status === 'navigating' ? '⏳ Waiting for page to load...' :
+            status === 'taking_screenshot' ? '📸 Taking screenshot for visual analysis...' : '';
           try { port.postMessage({ status, statusText, ...data }); } catch { /* closed */ }
         },
         onAction: (action: string, params: Record<string, unknown>) => {
@@ -402,6 +403,8 @@ function handleAgentStream(port: chrome.runtime.Port) {
           console.error(`[Wave] Agent action error: ${action}`, err);
         },
         getPageContext: (tid: number) => handleGetPageContext({ tabId: tid }),
+        captureScreenshot: (tid: number) => cdp.captureScreenshot({ id: String(tid), type: 'tab' }),
+        useVisionFallback: true, // Default to true, or load from storage
         signal: abortController.signal,
       });
 

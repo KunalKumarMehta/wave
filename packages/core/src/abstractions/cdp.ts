@@ -50,4 +50,7 @@ export interface BrowserController {
 
   /** Execute action using webview-native methods (non-CDP). */
   executeActionInWebview?(action: string, params: Record<string, unknown>, label: string): Promise<any>;
+
+  /** Capture a screenshot of the current page as a base64 string. */
+  captureScreenshot(target?: TargetIdentifier): Promise<string>;
 }

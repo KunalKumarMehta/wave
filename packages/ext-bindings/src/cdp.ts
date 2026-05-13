@@ -98,4 +98,23 @@ export class ExtBrowserController implements BrowserController {
       });
     });
   }
+
+  async captureScreenshot(target: TargetIdentifier): Promise<string> {
+    const isAttached = attachedTargets.has(target.id);
+    if (!isAttached) {
+      await this.attach(target);
+    }
+
+    try {
+      const result = await this.sendCommand<any>(target, 'Page.captureScreenshot', {
+        format: 'png',
+        quality: 80,
+      });
+      return result.data;
+    } finally {
+      if (!isAttached) {
+        await this.detach(target);
+      }
+    }
+  }
 }

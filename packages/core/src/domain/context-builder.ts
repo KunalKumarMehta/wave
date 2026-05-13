@@ -19,7 +19,10 @@ interface ContextSlot {
 }
 
 export interface BuiltContext {
-  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+  messages: Array<{ 
+    role: 'system' | 'user' | 'assistant'; 
+    content: string | Array<{ type: string; [key: string]: any }>;
+  }>;
   tokenEstimate: number;
   dropped: string[]; // labels of dropped slots
 }
@@ -38,9 +41,16 @@ function estimateTokens(text: string, isDom: boolean = false): number {
 export class ContextBuilder {
   private slots: ContextSlot[] = [];
   private maxTokens: number;
+  private _screenshot: string | null = null;
 
   constructor(maxTokens: number = 4096) {
     this.maxTokens = maxTokens;
+  }
+
+  /** Capture screenshot — base64 string. */
+  screenshot(base64Image: string): this {
+    this._screenshot = base64Image;
+    return this;
   }
 
   /** System prompt — always included (priority 0). */
@@ -87,7 +97,10 @@ export class ContextBuilder {
 
     const included: ContextSlot[] = [];
     const dropped: string[] = [];
-    let totalTokens = 0;
+    
+    // Reserve tokens for screenshot if present (approx 1000 tokens)
+    const screenshotTokens = this._screenshot ? 1000 : 0;
+    let totalTokens = screenshotTokens;
 
     for (const slot of sorted) {
       const isDom = slot.label === 'page-context';
@@ -107,7 +120,7 @@ export class ContextBuilder {
 
     // Re-sort included by conversation order:
     // system first, then history (chronological), then query last
-    const messages = [
+    const messages: any[] = [
       // System prompts
       ...included.filter((s) => s.role === 'system').map((s) => ({
         role: s.role,
@@ -122,11 +135,23 @@ export class ContextBuilder {
           return aIdx - bIdx;
         })
         .map((s) => ({ role: s.role, content: s.content })),
-      // Query last
-      ...included
-        .filter((s) => s.label === 'query')
-        .map((s) => ({ role: s.role, content: s.content })),
     ];
+
+    // Query last, with screenshot if available
+    const querySlot = included.find((s) => s.label === 'query');
+    if (querySlot) {
+      if (this._screenshot) {
+        messages.push({
+          role: 'user',
+          content: [
+            { type: 'text', text: querySlot.content },
+            { type: 'image', data: this._screenshot, mimeType: 'image/png' }
+          ]
+        });
+      } else {
+        messages.push({ role: 'user', content: querySlot.content });
+      }
+    }
 
     return { messages, tokenEstimate: totalTokens, dropped };
   }

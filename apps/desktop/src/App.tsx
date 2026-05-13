@@ -332,7 +332,8 @@ function App() {
               status === 'extracting_page' ? '🔍 Reading page structure...' : 
               status === 'thinking' ? '🧠 Analyzing page...' : 
               status === 'executing_action' ? `⚡ Executing: ${data?.action ?? 'action'}...` :
-              status === 'navigating' ? '⏳ Waiting for page to load...' : '';
+              status === 'navigating' ? '⏳ Waiting for page to load...' : 
+              status === 'taking_screenshot' ? '📸 Taking screenshot for visual analysis...' : '';
             if (statusText) mgr.setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, content: statusText } : m));
           },
           onAction: (action: string, params: any) => handleAgentAction(tab.id, action, params),
@@ -345,6 +346,8 @@ function App() {
             console.error(`[Wave] Agent action error: ${action}`, err);
           },
           getPageContext: (tid: string | number) => getPageContext(tid),
+          captureScreenshot: (tid: string | number) => cdp.captureScreenshot({ id: String(tid), type: tid === 'browser' ? 'webview' : 'tab' }),
+          useVisionFallback: true, // Default to true, or load from storage if we had it in scope
           signal: abortControllerRef.current.signal,
         });
       } else {

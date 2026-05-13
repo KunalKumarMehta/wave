@@ -37,6 +37,8 @@ export interface AgentLoopConfig {
   onActionConfirm?: (action: string, params: Record<string, unknown>) => Promise<boolean>;
   onError?: (error: Error, action: string) => void;
   getPageContext: (tabId: string | number) => Promise<PageContext>;
+  captureScreenshot?: (tabId: string | number) => Promise<string>;
+  useVisionFallback?: boolean;
   signal?: AbortSignal;
 }
 
@@ -80,6 +82,19 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentLoopRe
     const contextBuilder = new ContextBuilder(8192)
       .system(AGENT_SYSTEM_PROMPT)
       .pageContext(pageCtx.markdown, pageCtx.url, pageCtx.title);
+
+    // ── VISION FALLBACK ──
+    if (useVisionFallback !== false && captureScreenshot && pageCtx.stats.totalNodes < 5) {
+      onStatus('taking_screenshot', { reason: 'sparse_ax_tree', count: pageCtx.stats.totalNodes });
+      try {
+        const screenshot = await captureScreenshot(tabId);
+        if (screenshot) {
+          contextBuilder.screenshot(screenshot);
+        }
+      } catch (err) {
+        console.warn('[Wave] Screenshot fallback failed:', err);
+      }
+    }
 
     // Add action history as assistant/user pairs
     if (actions.length > 0) {

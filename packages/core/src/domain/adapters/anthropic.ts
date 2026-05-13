@@ -27,7 +27,22 @@ export class AnthropicAdapter implements StreamAdapter {
     const systemMessage = request.messages.find((m) => m.role === 'system');
     const chatMessages = request.messages
       .filter((m) => m.role !== 'system')
-      .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
+      .map((m) => {
+        if (Array.isArray(m.content)) {
+          return {
+            role: m.role as 'user' | 'assistant',
+            content: m.content.map(c => {
+              if (c.type === 'text') return { type: 'text', text: c.text };
+              if (c.type === 'image') return { 
+                type: 'image', 
+                source: { type: 'base64', media_type: c.mimeType || 'image/png', data: c.data } 
+              };
+              return c;
+            })
+          };
+        }
+        return { role: m.role as 'user' | 'assistant', content: m.content as string };
+      });
 
     const response = await fetch(ANTHROPIC_API_URL, {
       method: 'POST',

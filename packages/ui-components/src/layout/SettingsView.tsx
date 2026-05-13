@@ -41,10 +41,11 @@ export function SettingsView({
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [testing, setTesting] = useState(false);
+  const [useVisionFallback, setUseVisionFallback] = useState(true);
 
-  // Load existing key status on mount
+  // Load existing key status and settings on mount
   useEffect(() => {
-    const checkKeys = async () => {
+    const loadSettings = async () => {
       const providers: ProviderName[] = ['openai', 'anthropic', 'gemini'];
       const status: Record<string, boolean> = {};
       for (const p of providers) {
@@ -52,8 +53,16 @@ export function SettingsView({
         status[p] = !!key;
       }
       setSavedKeys(status as Record<ProviderName, boolean>);
+
+      const visionPref = await storage.config.get<boolean>('useVisionFallback');
+      if (visionPref !== null) setUseVisionFallback(visionPref);
     };
-    checkKeys();
+    loadSettings();
+  }, [storage]);
+
+  const handleToggleVision = useCallback(async (enabled: boolean) => {
+    setUseVisionFallback(enabled);
+    await storage.config.set('useVisionFallback', enabled);
   }, [storage]);
 
   const handleSaveKey = useCallback(async (provider: ProviderName) => {
@@ -164,6 +173,21 @@ export function SettingsView({
             </div>
           </div>
         )}
+      </section>
+
+      {/* Vision Fallback */}
+      <section className="settings__section">
+        <label className="settings__label settings__label--toggle">
+          <span>Use vision model for complex pages</span>
+          <input
+            type="checkbox"
+            checked={useVisionFallback}
+            onChange={(e) => handleToggleVision(e.target.checked)}
+          />
+        </label>
+        <p className="settings__help">
+          Falls back to visual analysis when accessibility tree is sparse (e.g. Google Maps, Figma).
+        </p>
       </section>
 
       {/* API Key Input */}
