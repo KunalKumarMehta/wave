@@ -36,6 +36,16 @@ fn set_browser_bounds(app: tauri::AppHandle, x: i32, y: i32, width: u32, height:
     }
 }
 
+#[tauri::command]
+async fn eval_browser(app: tauri::AppHandle, js: String) -> Result<(), String> {
+    if let Some(webview) = app.get_webview_window("browser") {
+        webview.eval(&js).map_err(|e| e.to_string())?;
+        Ok(())
+    } else {
+        Err("Browser not found".into())
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -53,7 +63,7 @@ pub fn run() {
             }
         }
     }).build())
-    .invoke_handler(tauri::generate_handler![greet, navigate_browser, get_browser_url, set_browser_bounds])
+    .invoke_handler(tauri::generate_handler![greet, navigate_browser, get_browser_url, set_browser_bounds, eval_browser])
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
@@ -70,6 +80,9 @@ pub fn run() {
         .parent(&main_window)?
         .position(0.0, 48.0)
         .inner_size(800.0, 600.0)
+        .on_message(|window, msg| {
+            let _ = window.emit("browser-ipc", msg);
+        })
         .build()?;
 
       // Add tray icon

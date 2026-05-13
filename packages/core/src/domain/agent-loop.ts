@@ -19,21 +19,16 @@ import type { StreamChunk } from '../types/stream.js';
 import { ContextBuilder } from './context-builder.js';
 import { AGENT_SYSTEM_PROMPT } from './agent-tools.js';
 import { parseToolCall, isTerminalAction } from './tool-call-parser.js';
+import type { PageContext } from '../abstractions/cdp.js';
 
-export interface PageContext {
-  markdown: string;
-  elements: Record<string, unknown>;
-  stats: { totalNodes: number; filteredNodes: number; outputTokenEstimate: number };
-  url: string;
-  title: string;
-}
+
 
 export interface AgentLoopConfig {
   maxSteps: number;
   adapter: StreamAdapter;
   apiKey: string;
   model: string;
-  tabId: number;
+  tabId: string | number;
   query: string;
   history: Array<{ role: 'user' | 'assistant'; content: string }>;
   onChunk: (chunk: StreamChunk) => void;
@@ -41,7 +36,7 @@ export interface AgentLoopConfig {
   onAction: (action: string, params: Record<string, unknown>) => Promise<unknown>;
   onActionConfirm?: (action: string, params: Record<string, unknown>) => Promise<boolean>;
   onError?: (error: Error, action: string) => void;
-  getPageContext: (tabId: number) => Promise<PageContext>;
+  getPageContext: (tabId: string | number) => Promise<PageContext>;
   signal?: AbortSignal;
 }
 

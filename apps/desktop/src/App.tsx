@@ -60,7 +60,10 @@ const convStorage = createConversationStorage({
 
 // ── CDP Operations ───────────────────────────────────────────────
 
-async function getPageContext(tabId: number) {
+async function getPageContext(tabId: string | number) {
+  if (tabId === 'browser') {
+    return cdp.extractPageContextFromWebview!('browser');
+  }
   const target = { id: String(tabId), type: 'tab' as const };
   try {
     await cdp.attach(target);
@@ -82,7 +85,10 @@ async function getPageContext(tabId: number) {
   }
 }
 
-async function handleAgentAction(tabId: number, action: string, params: Record<string, unknown>) {
+async function handleAgentAction(tabId: string | number, action: string, params: Record<string, unknown>) {
+  if (tabId === 'browser') {
+    return cdp.executeActionInWebview!(action, params, 'browser');
+  }
   const target = { id: String(tabId), type: 'tab' as const };
   try {
     await cdp.attach(target);
@@ -264,7 +270,7 @@ function App() {
     try {
       if (isPageQuery(content)) {
         const targets = await cdp.getTargets();
-        const tab = targets.find((t) => t.type === 'tab');
+        const tab = targets.find((t) => t.id === 'browser') || targets.find((t) => t.type === 'tab');
 
         if (!tab) {
           mgr.setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, content: 'Error: No active debuggable tab found. Ensure Chrome is running with --remote-debugging-port=9222', isStreaming: false } : m));
@@ -277,7 +283,7 @@ function App() {
           adapter: adapters[mgr.activeProvider],
           apiKey,
           model: mgr.activeModel,
-          tabId: Number(tab.id),
+          tabId: tab.id,
           query: content,
           history: mgr.messages.slice(-6).map((m) => ({ role: m.role as any, content: m.content })),
           onChunk: (chunk: any) => {
@@ -296,7 +302,7 @@ function App() {
               status === 'navigating' ? '⏳ Waiting for page to load...' : '';
             if (statusText) mgr.setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, content: statusText } : m));
           },
-          onAction: (action: string, params: any) => handleAgentAction(Number(tab.id), action, params),
+          onAction: (action: string, params: any) => handleAgentAction(tab.id, action, params),
           onActionConfirm: (action: string, params: any) => {
             return new Promise((resolve) => {
               setConfirmAction({ action, params, resolve });
@@ -305,7 +311,7 @@ function App() {
           onError: (err, action) => {
             console.error(`[Wave] Agent action error: ${action}`, err);
           },
-          getPageContext: (tid: number) => getPageContext(tid),
+          getPageContext: (tid: string | number) => getPageContext(tid),
           signal: abortControllerRef.current.signal,
         });
       } else {

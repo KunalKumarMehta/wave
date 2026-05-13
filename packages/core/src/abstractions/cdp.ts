@@ -9,6 +9,14 @@
 
 import type { IPCUnsubscribe } from './ipc.js';
 
+export interface PageContext {
+  markdown: string;
+  elements: Record<string, unknown>;
+  stats: { totalNodes: number; filteredNodes: number; outputTokenEstimate: number };
+  url: string;
+  title: string;
+}
+
 export type TargetIdentifier = {
   id: string;
   type: 'tab' | 'webview' | 'window';
@@ -36,4 +44,10 @@ export interface BrowserController {
 
   /** Get list of available targets. */
   getTargets(): Promise<TargetIdentifier[]>;
+
+  /** Extract page context using webview-native methods (non-CDP). */
+  extractPageContextFromWebview?(label: string): Promise<any>;
+
+  /** Execute action using webview-native methods (non-CDP). */
+  executeActionInWebview?(action: string, params: Record<string, unknown>, label: string): Promise<any>;
 }
