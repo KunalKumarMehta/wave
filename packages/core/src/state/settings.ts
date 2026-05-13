@@ -17,23 +17,39 @@ export interface ProviderConfig {
   hasKey: boolean;
 }
 
+export interface ModelMetadata {
+  contextWindow: number;
+  inputCostPer1K: number;
+  outputCostPer1K: number;
+}
+
+export const MODEL_METADATA: Record<string, ModelMetadata> = {
+  'gpt-4o': { contextWindow: 128000, inputCostPer1K: 0.005, outputCostPer1K: 0.015 },
+  'gpt-4o-mini': { contextWindow: 128000, inputCostPer1K: 0.00015, outputCostPer1K: 0.0006 },
+  'gpt-4.1-mini': { contextWindow: 256000, inputCostPer1K: 0.0001, outputCostPer1K: 0.0004 },
+  'claude-sonnet-4-20250514': { contextWindow: 200000, inputCostPer1K: 0.003, outputCostPer1K: 0.015 },
+  'claude-haiku-4-20250514': { contextWindow: 200000, inputCostPer1K: 0.00025, outputCostPer1K: 0.00125 },
+  'gemini-2.5-flash': { contextWindow: 1000000, inputCostPer1K: 0.000075, outputCostPer1K: 0.0003 },
+  'gemini-2.5-pro': { contextWindow: 2000000, inputCostPer1K: 0.0035, outputCostPer1K: 0.0105 },
+};
+
 export const PROVIDER_CATALOG: Record<ProviderName, Omit<ProviderConfig, 'hasKey'>> = {
   openai: {
     name: 'openai',
     label: 'OpenAI',
-    models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'o4-mini'],
+    models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1-mini'],
     defaultModel: 'gpt-4.1-mini',
   },
   anthropic: {
     name: 'anthropic',
     label: 'Anthropic',
-    models: ['claude-sonnet-4-20250514', 'claude-haiku-4-20250514', 'claude-3-5-haiku-20241022'],
+    models: ['claude-sonnet-4-20250514', 'claude-haiku-4-20250514'],
     defaultModel: 'claude-sonnet-4-20250514',
   },
   gemini: {
     name: 'gemini',
     label: 'Google Gemini',
-    models: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'],
+    models: ['gemini-2.5-flash', 'gemini-2.5-pro'],
     defaultModel: 'gemini-2.5-flash',
   },
 };

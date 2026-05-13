@@ -222,3 +222,54 @@
 .settings__delete-btn:hover {
   opacity: 1;
 }
+
+.settings__model-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  background: var(--wave-bg-tertiary);
+  border-radius: var(--wave-radius-sm);
+  margin-top: 4px;
+}
+
+.settings__model-stat {
+  font-size: 11px;
+  color: var(--wave-text-muted);
+}
+
+.settings__model-stat span {
+  color: var(--wave-text-secondary);
+  font-weight: 500;
+  display: inline-block;
+  width: 50px;
+}
+
+.settings__key-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.settings__test-btn {
+  background: none;
+  border: 1px solid var(--wave-border);
+  color: var(--wave-text-secondary);
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: var(--wave-radius-sm);
+  cursor: pointer;
+  transition: all var(--wave-transition);
+}
+
+.settings__test-btn:hover:not(:disabled) {
+  border-color: var(--wave-accent);
+  color: var(--wave-accent);
+  background: var(--wave-accent-glow);
+}
+
+.settings__test-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

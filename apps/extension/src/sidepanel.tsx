@@ -7,7 +7,8 @@ import { SettingsView } from '@wave/ui-components/src/layout/SettingsView.js';
 import { ConversationDrawer } from '@wave/ui-components/src/layout/ConversationDrawer.js';
 import { MessageList } from '@wave/ui-components/src/chat/MessageList.js';
 import { InputBar } from '@wave/ui-components/src/chat/InputBar.js';
-import { ActionConfirmation } from '@wave/ui-components/src/chat/ActionConfirmation.js';
+import { OnboardingView } from '@wave/ui-components/src/layout/OnboardingView.js';
+import { ErrorBoundary } from '@wave/ui-components/src/layout/ErrorBoundary.js';
 import type { UIProvider, Message } from '@wave/core';
 import { useConversationManager, generateId, isPageQuery, TITLE_SYSTEM_PROMPT } from '@wave/core';
 import { costTracker } from '@wave/core/src/domain/cost-tracker.js';
@@ -173,6 +174,20 @@ function App() {
   });
 
   const [confirmAction, setConfirmAction] = React.useState<{ action: string; params: any; confirmId: string; port: chrome.runtime.Port } | null>(null);
+  const [showOnboarding, setShowOnboarding] = React.useState(false);
+
+  useEffect(() => {
+    chrome.storage.local.get('onboarded').then((res) => {
+      if (!res.onboarded) setShowOnboarding(true);
+    });
+  }, []);
+
+  const handleOnboardingComplete = async (apiKey: string, provider: string) => {
+    await storage.secure.setSecret(`apikey_${provider}`, apiKey);
+    await chrome.storage.local.set({ onboarded: true });
+    mgr.handleProviderChange(provider as any);
+    setShowOnboarding(false);
+  };
 
   const handleStreamMessages = useStreamHandler(
     mgr.setMessages, 
@@ -367,18 +382,30 @@ function App() {
           }}
         />
       )}
+      {showOnboarding && (
+        <OnboardingView 
+          onComplete={handleOnboardingComplete}
+          onSkip={() => {
+            chrome.storage.local.set({ onboarded: true });
+            setShowOnboarding(false);
+          }}
+        />
+      )}
       {!mgr.settingsOpen && (
         <InputBar
           onSend={handleSend}
           disabled={mgr.isStreaming}
-          placeholder={mgr.isStreaming ? 'Wave is thinking...' : undefined}
+          placeholder={mgr.isStreaming ? 'Wave is thinking...' : 'Ask Wave... (⌘⇧W)'}
         />
       )}
     </PlatformProvider>
   );
 }
 
-const root = document.getElementById('root');
 if (root) {
-  createRoot(root).render(<App />);
+  createRoot(root).render(
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
+  );
 }

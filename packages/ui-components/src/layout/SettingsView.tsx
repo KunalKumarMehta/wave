@@ -1,7 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
 import { usePlatform } from '../context/PlatformContext.js';
-import { PROVIDER_CATALOG, type ProviderName } from '@wave/core/src/state/settings.js';
+import { PROVIDER_CATALOG, MODEL_METADATA, type ProviderName } from '@wave/core/src/state/settings.js';
+import { OpenAIAdapter } from '@wave/core/src/domain/adapters/openai.js';
+import { AnthropicAdapter } from '@wave/core/src/domain/adapters/anthropic.js';
+import { GeminiAdapter } from '@wave/core/src/domain/adapters/gemini.js';
 import './SettingsView.css';
+
+const ADAPTERS: Record<string, any> = {
+  openai: new OpenAIAdapter(),
+  anthropic: new AnthropicAdapter(),
+  gemini: new GeminiAdapter(),
+};
 
 interface SettingsViewProps {
   activeProvider: ProviderName;
@@ -31,6 +40,7 @@ export function SettingsView({
   });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [testing, setTesting] = useState(false);
 
   // Load existing key status on mount
   useEffect(() => {
@@ -68,6 +78,33 @@ export function SettingsView({
     setSavedKeys((prev) => ({ ...prev, [provider]: false }));
     setMessage(`${PROVIDER_CATALOG[provider].label} key removed`);
     setTimeout(() => setMessage(''), 2000);
+  }, [storage]);
+
+  const handleTestConnection = useCallback(async (provider: ProviderName) => {
+    const key = await storage.secure.getSecret(`apikey_${provider}`);
+    if (!key) {
+      setMessage('Save a key first');
+      return;
+    }
+
+    setTesting(true);
+    try {
+      const adapter = ADAPTERS[provider];
+      let success = false;
+      await adapter.stream({
+        model: PROVIDER_CATALOG[provider].defaultModel,
+        messages: [{ role: 'user', content: 'hi' }]
+      }, { apiKey: key }, (chunk: any) => {
+        if (chunk.type === 'text_delta') success = true;
+      }, new AbortController().signal);
+
+      if (success) setMessage('Connection successful! ✅');
+      else setMessage('Connection failed ❌');
+    } catch (err) {
+      setMessage(`Error: ${err instanceof Error ? err.message : 'Unknown'}`);
+    }
+    setTesting(false);
+    setTimeout(() => setMessage(''), 3000);
   }, [storage]);
 
   const catalog = PROVIDER_CATALOG[activeProvider];
@@ -114,6 +151,19 @@ export function SettingsView({
             </option>
           ))}
         </select>
+        {MODEL_METADATA[activeModel] && (
+          <div className="settings__model-info">
+            <div className="settings__model-stat">
+              <span>Context:</span> {MODEL_METADATA[activeModel].contextWindow.toLocaleString()} tokens
+            </div>
+            <div className="settings__model-stat">
+              <span>Input:</span> ${MODEL_METADATA[activeModel].inputCostPer1K}/1K
+            </div>
+            <div className="settings__model-stat">
+              <span>Output:</span> ${MODEL_METADATA[activeModel].outputCostPer1K}/1K
+            </div>
+          </div>
+        )}
       </section>
 
       {/* API Key Input */}
@@ -146,12 +196,21 @@ export function SettingsView({
           </button>
         </div>
         {savedKeys[activeProvider] && (
-          <button
-            className="settings__delete-btn"
-            onClick={() => handleDeleteKey(activeProvider)}
-          >
-            Remove key
-          </button>
+          <div className="settings__key-actions">
+            <button
+              className="settings__test-btn"
+              onClick={() => handleTestConnection(activeProvider)}
+              disabled={testing}
+            >
+              {testing ? 'Testing...' : 'Test connection'}
+            </button>
+            <button
+              className="settings__delete-btn"
+              onClick={() => handleDeleteKey(activeProvider)}
+            >
+              Clear key
+            </button>
+          </div>
         )}
       </section>
     </div>
