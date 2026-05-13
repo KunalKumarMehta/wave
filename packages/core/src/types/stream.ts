@@ -7,7 +7,7 @@
  * @see Knowledge Base: Wave 5.2 — Unified LLM Streaming Abstraction Layer
  */
 
-export type ChunkType = 'text_delta' | 'tool_call_delta' | 'thinking_delta' | 'done' | 'error';
+export type ChunkType = 'text_delta' | 'tool_call_delta' | 'thinking_delta' | 'done' | 'error' | 'agent_step';
 
 export interface StreamMetadata {
   id?: string;

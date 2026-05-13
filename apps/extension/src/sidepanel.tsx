@@ -7,6 +7,7 @@ import { SettingsView } from '@wave/ui-components/src/layout/SettingsView.js';
 import { ConversationDrawer } from '@wave/ui-components/src/layout/ConversationDrawer.js';
 import { MessageList } from '@wave/ui-components/src/chat/MessageList.js';
 import { InputBar } from '@wave/ui-components/src/chat/InputBar.js';
+import { ActionConfirmation } from '@wave/ui-components/src/chat/ActionConfirmation.js';
 import type { UIProvider, Message } from '@wave/core';
 import { useConversationManager, generateId, isPageQuery, TITLE_SYSTEM_PROMPT } from '@wave/core';
 import { costTracker } from '@wave/core/src/domain/cost-tracker.js';
@@ -44,10 +45,15 @@ const convStorage = createConversationStorage({
 // ── Stream Handler ──────────────────────────────────────────────
 
 interface StreamMsg {
+  type?: string;
   chunk?: StreamChunk;
   done?: boolean;
   error?: string;
   status?: string;
+  statusText?: string;
+  action?: string;
+  params?: any;
+  confirmId?: string;
   pageStats?: unknown;
 }
 
@@ -55,20 +61,14 @@ function useStreamHandler(
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>,
   setIsStreaming: React.Dispatch<React.SetStateAction<boolean>>,
   onCostUpdate: () => void,
+  onConfirm: (action: string, params: any, confirmId: string, port: chrome.runtime.Port) => void,
 ) {
   const handleStreamMessages = useCallback(
     (assistantMsgId: string, port: chrome.runtime.Port, provider: string, model: string) => {
       port.onMessage.addListener((message: StreamMsg) => {
         // Status updates (agent mode)
         if (message.status) {
-          const statusText =
-            message.status === 'extracting_page'
-              ? '🔍 Reading page structure...'
-              : message.status === 'thinking'
-                ? '🧠 Analyzing page...'
-                : message.status === 'executing_action'
-                  ? `⚡ Executing: ${(message as Record<string, unknown>).action ?? 'action'}...`
-                  : '';
+          const statusText = message.statusText;
           if (statusText) {
             setMessages((prev) =>
               prev.map((m) =>
@@ -76,6 +76,11 @@ function useStreamHandler(
               )
             );
           }
+          return;
+        }
+
+        if (message.type === 'confirm_action') {
+          onConfirm(message.action!, message.params, message.confirmId!, port);
           return;
         }
 
@@ -167,7 +172,16 @@ function App() {
     configStorage: storage.config,
   });
 
-  const handleStreamMessages = useStreamHandler(mgr.setMessages, mgr.setIsStreaming, mgr.refreshCost);
+  const [confirmAction, setConfirmAction] = React.useState<{ action: string; params: any; confirmId: string; port: chrome.runtime.Port } | null>(null);
+
+  const handleStreamMessages = useStreamHandler(
+    mgr.setMessages, 
+    mgr.setIsStreaming, 
+    mgr.refreshCost,
+    (action, params, confirmId, port) => {
+      setConfirmAction({ action, params, confirmId, port });
+    }
+  );
 
   // Debounced persistence of messages to storage
   const persistTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -339,6 +353,20 @@ function App() {
           <MessageList messages={mgr.messages} />
         )}
       </SidePanel>
+      {confirmAction && (
+        <ActionConfirmation 
+          action={confirmAction.action}
+          params={confirmAction.params}
+          onAllow={() => { 
+            confirmAction.port.postMessage({ type: 'confirm_action_response', confirmId: confirmAction.confirmId, allowed: true });
+            setConfirmAction(null); 
+          }}
+          onDeny={() => { 
+            confirmAction.port.postMessage({ type: 'confirm_action_response', confirmId: confirmAction.confirmId, allowed: false });
+            setConfirmAction(null); 
+          }}
+        />
+      )}
       {!mgr.settingsOpen && (
         <InputBar
           onSend={handleSend}

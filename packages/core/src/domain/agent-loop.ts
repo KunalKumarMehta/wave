@@ -39,6 +39,8 @@ export interface AgentLoopConfig {
   onChunk: (chunk: StreamChunk) => void;
   onStatus: (status: string, data?: Record<string, unknown>) => void;
   onAction: (action: string, params: Record<string, unknown>) => Promise<unknown>;
+  onActionConfirm?: (action: string, params: Record<string, unknown>) => Promise<boolean>;
+  onError?: (error: Error, action: string) => void;
   getPageContext: (tabId: number) => Promise<PageContext>;
   signal?: AbortSignal;
 }
@@ -62,7 +64,7 @@ export interface AgentLoopResult {
 export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentLoopResult> {
   const {
     maxSteps, adapter, apiKey, model, tabId, query,
-    history, onChunk, onStatus, onAction, getPageContext, signal,
+    history, onChunk, onStatus, onAction, onActionConfirm, onError, getPageContext, signal,
   } = config;
 
   const actions: AgentStepRecord[] = [];
@@ -138,37 +140,72 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentLoopRe
       break;
     }
 
+    // Resolve backendNodeId from element map if ref provided
+    const params = { ...toolCall.params };
+    if (params.ref && pageCtx.elements) {
+      const el = pageCtx.elements[params.ref as string] as { backendNodeId?: number; name?: string } | undefined;
+      if (el?.backendNodeId) {
+        params.backendNodeId = el.backendNodeId;
+      }
+      if (el?.name) {
+        params.name = el.name;
+      }
+    }
+
+    // ── CONFIRM ──
+    if (onActionConfirm) {
+      const allowed = await onActionConfirm(toolCall.action, params);
+      if (!allowed) {
+        onChunk({ type: 'text_delta', content: `\n\n> ❌ Action denied by user: ${toolCall.action}. Stopping loop.` });
+        break;
+      }
+    }
+
     // ── ACT ──
     onStatus('executing_action', {
       step,
       action: toolCall.action,
-      params: toolCall.params,
+      params,
     });
 
-    // Resolve backendNodeId from element map if ref provided
-    const params = { ...toolCall.params };
-    if (params.ref && pageCtx.elements) {
-      const el = pageCtx.elements[params.ref as string] as { backendNodeId?: number } | undefined;
-      if (el?.backendNodeId) {
-        params.backendNodeId = el.backendNodeId;
+    let result: unknown;
+    try {
+      if (toolCall.action === 'navigate') {
+        onStatus('navigating', { url: params.url });
       }
+
+      result = await onAction(toolCall.action, params);
+
+      if (toolCall.action === 'navigate') {
+        await sleep(2000); // Wait for page to load
+      } else {
+        await sleep(500);
+      }
+    } catch (error) {
+      const err = error as Error;
+      onError?.(err, toolCall.action);
+      result = { error: err.message };
+      onChunk({ type: 'text_delta', content: `\n\n> ⚠️ Action failed: ${err.message}. Agent will decide next step.` });
     }
 
-    const result = await onAction(toolCall.action, params);
     actions.push({ action: toolCall.action, params: toolCall.params, result });
-
-    // Brief pause for page to settle after action
-    await sleep(500);
 
     // Add this step's response to loop history for next iteration
     loopHistory.push({ role: 'assistant', content: fullText });
     loopHistory.push({
       role: 'user',
-      content: `Action "${toolCall.action}" executed. Here is the updated page state.`,
+      content: `Action "${toolCall.action}" executed. Result: ${JSON.stringify(result)}. Here is the updated page state.`,
     });
 
-    // Separator in UI between steps
-    onChunk({ type: 'text_delta', content: '\n\n---\n\n' });
+    // Separator in UI between steps - replaced with marker for component visualization
+    onChunk({ 
+      type: 'text_delta', 
+      content: `\n\n<!-- AGENT_STEP: ${JSON.stringify({ 
+        step: step + 1, 
+        action: toolCall.action, 
+        target: params.name || params.text || params.url || params.ref || 'target'
+      })} -->\n\n` 
+    });
   }
 
   // If we hit maxSteps without done(), warn

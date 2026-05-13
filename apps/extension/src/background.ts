@@ -249,6 +249,18 @@ async function handleAgentAction(args: {
       case 'navigate': {
         const url = args.params.url as string;
         await cdp.sendCommand(target, 'Page.navigate', { url });
+
+        // Wait for load event (max 5s)
+        await new Promise<void>((resolve) => {
+          const timeout = setTimeout(resolve, 5000);
+          const unsubscribe = cdp.onEvent('Page.loadEventFired', () => {
+            clearTimeout(timeout);
+            unsubscribe();
+            resolve();
+          });
+          cdp.sendCommand(target, 'Page.enable').catch(() => {});
+        });
+
         await cdp.detach(target);
         return { success: true, action: 'navigate', url };
       }
@@ -358,10 +370,36 @@ function handleAgentStream(port: chrome.runtime.Port) {
           try { port.postMessage({ chunk }); } catch { abortController?.abort(); }
         },
         onStatus: (status: string, data?: Record<string, unknown>) => {
-          try { port.postMessage({ status, ...data }); } catch { /* closed */ }
+          const statusText = 
+            status === 'extracting_page' ? '🔍 Reading page structure...' : 
+            status === 'thinking' ? '🧠 Analyzing page...' : 
+            status === 'executing_action' ? `⚡ Executing: ${data?.action ?? 'action'}...` :
+            status === 'navigating' ? '⏳ Waiting for page to load...' : '';
+          try { port.postMessage({ status, statusText, ...data }); } catch { /* closed */ }
         },
         onAction: (action: string, params: Record<string, unknown>) => {
           return handleAgentAction({ tabId, action, params });
+        },
+        onActionConfirm: (action: string, params: Record<string, unknown>) => {
+          return new Promise((resolve) => {
+            const confirmId = Math.random().toString(36).slice(2);
+            try {
+              port.postMessage({ type: 'confirm_action', action, params, confirmId });
+              
+              const listener = (msg: any) => {
+                if (msg.type === 'confirm_action_response' && msg.confirmId === confirmId) {
+                  port.onMessage.removeListener(listener);
+                  resolve(!!msg.allowed);
+                }
+              };
+              port.onMessage.addListener(listener);
+            } catch {
+              resolve(false);
+            }
+          });
+        },
+        onError: (err, action) => {
+          console.error(`[Wave] Agent action error: ${action}`, err);
         },
         getPageContext: (tid: number) => handleGetPageContext({ tabId: tid }),
         signal: abortController.signal,

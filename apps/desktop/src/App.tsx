@@ -3,6 +3,7 @@ import { PlatformProvider, SidePanel, SettingsView } from '@wave/ui-components';
 import { InputBar } from '@wave/ui-components/src/chat/InputBar.js';
 import { MessageList } from '@wave/ui-components/src/chat/MessageList.js';
 import { ConversationDrawer } from '@wave/ui-components/src/layout/ConversationDrawer.js';
+import { ActionConfirmation } from '@wave/ui-components/src/chat/ActionConfirmation.js';
 import { NativeIPCProvider, NativeStorageProvider, NativeBrowserController } from '@wave/native-bindings';
 import { useConversationManager, generateId, isPageQuery, CHAT_SYSTEM_PROMPT, TITLE_SYSTEM_PROMPT } from '@wave/core';
 import type { Message } from '@wave/core';
@@ -110,9 +111,22 @@ async function handleAgentAction(tabId: number, action: string, params: Record<s
         return { success: true, action: 'type', ref: params.ref, text: params.text as string };
       }
       case 'navigate': {
-        await cdp.sendCommand(target, 'Page.navigate', { url: params.url });
+        const url = params.url as string;
+        await cdp.sendCommand(target, 'Page.navigate', { url });
+
+        // Wait for load event (max 5s)
+        await new Promise<void>((resolve) => {
+          const timeout = setTimeout(resolve, 5000);
+          const unsubscribe = cdp.onEvent('Page.loadEventFired', () => {
+            clearTimeout(timeout);
+            unsubscribe();
+            resolve();
+          });
+          cdp.sendCommand(target, 'Page.enable').catch(() => {});
+        });
+
         await cdp.detach(target);
-        return { success: true, action: 'navigate', url: params.url as string };
+        return { success: true, action: 'navigate', url };
       }
       case 'scroll': {
         const deltaY = params.direction === 'down' ? 400 : -400;
@@ -139,6 +153,7 @@ function App() {
   });
 
   const abortControllerRef = useRef<AbortController | null>(null);
+  const [confirmAction, setConfirmAction] = React.useState<{ action: string; params: any; resolve: (val: boolean) => void } | null>(null);
 
   const handleSend = useCallback(async (content: string) => {
     const apiKey = await storage.secure.getSecret(`apikey_${mgr.activeProvider}`);
@@ -220,10 +235,22 @@ function App() {
             }
           },
           onStatus: (status: string, data?: any) => {
-            const statusText = status === 'extracting_page' ? '🔍 Reading page structure...' : status === 'thinking' ? '🧠 Analyzing page...' : status === 'executing_action' ? `⚡ Executing: ${data?.action ?? 'action'}...` : '';
+            const statusText = 
+              status === 'extracting_page' ? '🔍 Reading page structure...' : 
+              status === 'thinking' ? '🧠 Analyzing page...' : 
+              status === 'executing_action' ? `⚡ Executing: ${data?.action ?? 'action'}...` :
+              status === 'navigating' ? '⏳ Waiting for page to load...' : '';
             if (statusText) mgr.setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, content: statusText } : m));
           },
           onAction: (action: string, params: any) => handleAgentAction(Number(tab.id), action, params),
+          onActionConfirm: (action: string, params: any) => {
+            return new Promise((resolve) => {
+              setConfirmAction({ action, params, resolve });
+            });
+          },
+          onError: (err, action) => {
+            console.error(`[Wave] Agent action error: ${action}`, err);
+          },
           getPageContext: (tid: number) => getPageContext(tid),
           signal: abortControllerRef.current.signal,
         });
@@ -300,6 +327,14 @@ function App() {
           <MessageList messages={mgr.messages} />
         )}
       </SidePanel>
+      {confirmAction && (
+        <ActionConfirmation 
+          action={confirmAction.action}
+          params={confirmAction.params}
+          onAllow={() => { confirmAction.resolve(true); setConfirmAction(null); }}
+          onDeny={() => { confirmAction.resolve(false); setConfirmAction(null); }}
+        />
+      )}
       {!mgr.settingsOpen && (
         <InputBar
           onSend={handleSend}

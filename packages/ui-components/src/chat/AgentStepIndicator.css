@@ -1,0 +1,58 @@
+.agent-step-indicator {
+  margin: 12px 0;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border-left: 3px solid var(--wave-accent, #6c63ff);
+  border-radius: 4px;
+  font-size: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.agent-step-indicator--error {
+  border-left-color: #ff4d4d;
+  background: rgba(255, 77, 77, 0.05);
+}
+
+.agent-step-indicator__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.agent-step-indicator__badge {
+  background: var(--wave-accent, #6c63ff);
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+}
+
+.agent-step-indicator--error .agent-step-indicator__badge {
+  background: #ff4d4d;
+}
+
+.agent-step-indicator__action {
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.agent-step-indicator__target {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.8rem;
+}
+
+.agent-step-indicator__code {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: 'Fira Code', monospace;
+  color: var(--wave-accent, #6c63ff);
+}
+
+.agent-step-indicator--error .agent-step-indicator__code {
+  color: #ff4d4d;
+}

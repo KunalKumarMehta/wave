@@ -1,4 +1,5 @@
 import React from 'react';
+import { AgentStepIndicator } from './AgentStepIndicator.js';
 import './MarkdownRenderer.css';
 
 interface MarkdownRendererProps {
@@ -6,7 +7,7 @@ interface MarkdownRendererProps {
 }
 
 interface ParsedBlock {
-  type: 'text' | 'code' | 'heading' | 'list' | 'ordered-list' | 'table' | 'hr' | 'blockquote';
+  type: 'text' | 'code' | 'heading' | 'list' | 'ordered-list' | 'table' | 'hr' | 'blockquote' | 'agent-step';
   content: string;
   language?: string;
   level?: number;
@@ -41,6 +42,14 @@ function parseBlocks(text: string): ParsedBlock[] {
     // Horizontal rule (---, ***, ___)
     if (line.match(/^\s*([-*_])\s*\1\s*\1(?:\s|\1)*$/)) {
       blocks.push({ type: 'hr', content: '' });
+      i++;
+      continue;
+    }
+
+    // Agent Step marker
+    const agentStepMatch = line.match(/^\s*<!-- AGENT_STEP: (.+?) -->\s*$/);
+    if (agentStepMatch) {
+      blocks.push({ type: 'agent-step', content: agentStepMatch[1] });
       i++;
       continue;
     }
@@ -121,7 +130,8 @@ function parseBlocks(text: string): ParsedBlock[] {
       !lines[i].match(/^\s*\d+\.\s/) &&
       !lines[i].match(/^\s*>\s?/) &&
       !lines[i].match(/^\s*\|/) &&
-      !lines[i].match(/^\s*([-*_])\s*\1\s*\1(?:\s|\1)*$/)
+      !lines[i].match(/^\s*([-*_])\s*\1\s*\1(?:\s|\1)*$/) &&
+      !lines[i].match(/^\s*<!-- AGENT_STEP: .+? -->\s*$/)
     ) {
       textLines.push(lines[i]);
       i++;
@@ -305,6 +315,23 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
                 ))}
               </blockquote>
             );
+
+          case 'agent-step': {
+            try {
+              const data = JSON.parse(block.content);
+              return (
+                <AgentStepIndicator 
+                  key={i}
+                  step={data.step} 
+                  action={data.action} 
+                  target={data.target} 
+                  status="completed"
+                />
+              );
+            } catch {
+              return <div key={i} className="md-error">Failed to parse agent step</div>;
+            }
+          }
 
           case 'text':
             return (
