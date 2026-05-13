@@ -1,16 +1,21 @@
 import React, { useCallback, useRef, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
-import { PlatformProvider } from '@wave/ui-components';
-import { SidePanel } from '@wave/ui-components';
+import { 
+  PlatformProvider, 
+  SidePanel, 
+  MessageList, 
+  InputBar, 
+  ActionConfirmation,
+  SettingsView,
+  ConversationDrawer,
+  OnboardingView,
+  ErrorBoundary,
+  ModelLoader
+} from '@wave/ui-components';
 import { ExtIPCProvider, ExtStorageProvider } from '@wave/ext-bindings';
-import { SettingsView } from '@wave/ui-components/src/layout/SettingsView.js';
-import { ConversationDrawer } from '@wave/ui-components/src/layout/ConversationDrawer.js';
-import { OnboardingView } from '@wave/ui-components/src/layout/OnboardingView.js';
-import { ErrorBoundary } from '@wave/ui-components/src/layout/ErrorBoundary.js';
-import { ModelLoader } from '@wave/ui-components/src/layout/ModelLoader.js';
 import { localRouter } from '@wave/core/src/domain/local-router.js';
 import type { UIProvider, Message } from '@wave/core';
-import { useConversationManager, generateId, isPageQuery, TITLE_SYSTEM_PROMPT } from '@wave/core';
+import { useConversationManager, generateId, TITLE_SYSTEM_PROMPT } from '@wave/core';
 import { costTracker } from '@wave/core/src/domain/cost-tracker.js';
 import { createConversationStorage } from '@wave/core/src/domain/conversation-storage.js';
 import type { StreamChunk } from '@wave/core/src/types/stream.js';
@@ -106,10 +111,10 @@ function useStreamHandler(
               prev.map((m) => {
                 if (m.id !== assistantMsgId) return m;
                 const current = m.content;
-                const isStatus = current.startsWith('🔍') || current.startsWith('🧠');
+                const isStatus = typeof current === 'string' && (current.startsWith('🔍') || current.startsWith('🧠'));
                 return {
                   ...m,
-                  content: isStatus ? chunk.content : current + chunk.content,
+                  content: isStatus ? chunk.content : (typeof current === 'string' ? current + chunk.content : chunk.content),
                 };
               })
             );
@@ -437,6 +442,7 @@ function App() {
   );
 }
 
+const root = document.getElementById('root');
 if (root) {
   createRoot(root).render(
     <ErrorBoundary>

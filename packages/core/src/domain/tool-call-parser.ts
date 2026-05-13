@@ -9,7 +9,7 @@
  * Only one action per response is valid per agent loop contract.
  */
 
-const VALID_ACTIONS = new Set(['click', 'type', 'scroll', 'navigate', 'done']);
+const VALID_ACTIONS = new Set(['click', 'type', 'scroll', 'navigate', 'open_tab', 'switch_tab', 'close_tab', 'list_tabs', 'done']);
 
 export interface ParsedToolCall {
   action: string;

@@ -19,7 +19,7 @@ async function getMasterKey(): Promise<CryptoKey> {
   if (cachedKey) return cachedKey;
 
   // Try session cache first
-  const sessionResult = await new Promise<Record<string, string>>((resolve) => {
+  const sessionResult = await new Promise<any>((resolve) => {
     chrome.storage.session.get(MASTER_KEY_STORAGE, resolve);
   });
 
@@ -35,7 +35,7 @@ async function getMasterKey(): Promise<CryptoKey> {
   }
 
   // Try persistent storage
-  const localResult = await new Promise<Record<string, string>>((resolve) => {
+  const localResult = await new Promise<any>((resolve) => {
     chrome.storage.local.get(MASTER_KEY_STORAGE, resolve);
   });
 

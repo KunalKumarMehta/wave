@@ -4,10 +4,14 @@
 
 export type MessageRole = 'user' | 'assistant' | 'system';
 
+export type ContentPart = 
+  | { type: 'text'; text: string }
+  | { type: 'image'; data: string; mimeType: string };
+
 export interface Message {
   id: string;
   role: MessageRole;
-  content: string;
+  content: string | ContentPart[];
   timestamp: number;
   /** If this message contains tool calls. */
   toolCalls?: ToolCallResult[];

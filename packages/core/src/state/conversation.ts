@@ -67,15 +67,23 @@ export const conversationStore = createStore<ConversationState>((set, get) => ({
     set((state) => {
       const convs = state.conversations.map((c) => {
         if (c.id === state.activeConversationId) {
+          let title = c.title;
+          if (c.messages.length === 0 && message.role === 'user') {
+            if (typeof message.content === 'string') {
+              title = message.content.slice(0, 50);
+            } else {
+              const text = message.content
+                .filter(p => p.type === 'text')
+                .map(p => (p as any).text)
+                .join(' ');
+              title = text.slice(0, 50) || 'New conversation';
+            }
+          }
           return {
             ...c,
             messages: [...c.messages, message],
             updatedAt: Date.now(),
-            // Auto-title from first user message
-            title:
-              c.messages.length === 0 && message.role === 'user'
-                ? message.content.slice(0, 50)
-                : c.title,
+            title,
           };
         }
         return c;
@@ -103,9 +111,23 @@ export const conversationStore = createStore<ConversationState>((set, get) => ({
         if (c.id === state.activeConversationId) {
           return {
             ...c,
-            messages: c.messages.map((m) =>
-              m.id === id ? { ...m, content: m.content + content } : m
-            ),
+            messages: c.messages.map((m) => {
+              if (m.id === id) {
+                if (typeof m.content === 'string') {
+                  return { ...m, content: m.content + content };
+                } else {
+                  const newParts = [...m.content];
+                  const lastPart = newParts[newParts.length - 1];
+                  if (lastPart && lastPart.type === 'text') {
+                    (lastPart as any).text += content;
+                  } else {
+                    newParts.push({ type: 'text', text: content });
+                  }
+                  return { ...m, content: newParts };
+                }
+              }
+              return m;
+            }),
           };
         }
         return c;

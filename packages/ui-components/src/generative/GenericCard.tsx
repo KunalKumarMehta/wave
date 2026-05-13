@@ -1,4 +1,3 @@
-import React from 'react';
 import './GenericCard.css';
 
 interface GenericCardProps {

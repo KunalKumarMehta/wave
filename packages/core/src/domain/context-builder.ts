@@ -11,9 +11,11 @@
  * @see Knowledge Base: Wave 5.3 — Agent Context Management & Token Budgeting
  */
 
+import { ContentPart } from '../types/message.js';
+
 interface ContextSlot {
   role: 'system' | 'user' | 'assistant';
-  content: string;
+  content: string | ContentPart[];
   priority: number; // lower = higher priority = included first
   label: string;    // for debugging
 }
@@ -21,21 +23,30 @@ interface ContextSlot {
 export interface BuiltContext {
   messages: Array<{ 
     role: 'system' | 'user' | 'assistant'; 
-    content: string | Array<{ type: string; [key: string]: any }>;
+    content: string | ContentPart[];
   }>;
   tokenEstimate: number;
   dropped: string[]; // labels of dropped slots
 }
 
 /**
- * Estimate tokens from text.
- * Uses heuristic ratios from KB research:
- * - DOM/structured content: 3.2 chars/token
- * - Natural prose: 4.0 chars/token
+ * Estimate tokens from text or content parts.
  */
-function estimateTokens(text: string, isDom: boolean = false): number {
-  const ratio = isDom ? 3.2 : 4.0;
-  return Math.ceil(text.length / ratio);
+function estimateTokens(content: string | ContentPart[], isDom: boolean = false): number {
+  if (typeof content === 'string') {
+    const ratio = isDom ? 3.2 : 4.0;
+    return Math.ceil(content.length / ratio);
+  }
+  
+  // Estimate for content parts
+  return content.reduce((acc, part) => {
+    if (part.type === 'text') {
+      return acc + Math.ceil(part.text.length / 4.0);
+    } else if (part.type === 'image') {
+      return acc + 1000; // Fixed budget for images
+    }
+    return acc;
+  }, 0);
 }
 
 export class ContextBuilder {
@@ -76,7 +87,7 @@ export class ContextBuilder {
   }
 
   /** Conversation history messages — lower priority (10+). Oldest = lowest priority. */
-  history(messages: Array<{ role: 'user' | 'assistant'; content: string }>): this {
+  history(messages: Array<{ role: 'user' | 'assistant'; content: string | ContentPart[] }>): this {
     // Add in reverse order so newest has lower priority number
     const reversed = [...messages].reverse();
     reversed.forEach((msg, i) => {
@@ -144,7 +155,7 @@ export class ContextBuilder {
         messages.push({
           role: 'user',
           content: [
-            { type: 'text', text: querySlot.content },
+            { type: 'text', text: querySlot.content as string },
             { type: 'image', data: this._screenshot, mimeType: 'image/png' }
           ]
         });

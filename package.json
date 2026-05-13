@@ -1,13 +1,19 @@
 {
   "name": "wave",
+  "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "pnpm --filter @wave/extension dev",
     "build": "pnpm --filter @wave/extension build",
     "test": "pnpm -r test",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "verify": "pnpm typecheck && pnpm test && pnpm build",
+    "prepare": "husky"
   },
   "engines": {
     "node": ">=20.0.0"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7"
   }
 }

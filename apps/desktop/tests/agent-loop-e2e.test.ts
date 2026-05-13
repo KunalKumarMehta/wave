@@ -20,8 +20,14 @@ describe('Agent Loop E2E (Mocked Controller)', () => {
   it('should complete a multi-step task', async () => {
     const mockAdapter = {
       stream: vi.fn().mockImplementation(async (req, opts, onChunk) => {
-        const hasType = req.messages.some((m: any) => m.role === 'assistant' && m.content.includes('type'));
-        const hasClick = req.messages.some((m: any) => m.role === 'assistant' && m.content.includes('click'));
+        const hasType = req.messages.some((m: any) => {
+          const text = typeof m.content === 'string' ? m.content : m.content.map((p: any) => p.text || '').join(' ');
+          return m.role === 'assistant' && text.includes('type');
+        });
+        const hasClick = req.messages.some((m: any) => {
+          const text = typeof m.content === 'string' ? m.content : m.content.map((p: any) => p.text || '').join(' ');
+          return m.role === 'assistant' && text.includes('click');
+        });
         
         if (!hasType) {
           onChunk({ type: 'text_delta', content: 'Typing...\n```json\n{"action": "type", "ref": "e4", "text": "test@example.com"}\n```' });
@@ -70,7 +76,10 @@ describe('Agent Loop E2E (Mocked Controller)', () => {
       history: [],
       onChunk: () => {},
       onStatus: () => {},
-      onAction: (action, params) => mockController.executeAction(action, params),
+      onAction: (action, params) => {
+        if (action === 'list_tabs') return Promise.resolve([]);
+        return mockController.executeAction(action, params);
+      },
       getPageContext: () => Promise.resolve(mockController.extractPageContext() as any),
     });
 

@@ -12,6 +12,8 @@ import { AnthropicAdapter } from '@wave/core/src/domain/adapters/anthropic.js';
 import { GeminiAdapter } from '@wave/core/src/domain/adapters/gemini.js';
 import { serializeAXTree } from '@wave/core/src/domain/ax-serializer.js';
 import { ExtBrowserController } from '@wave/ext-bindings/src/cdp.js';
+import { ExtTabController } from '@wave/ext-bindings/src/tabs.js';
+import { TabManager } from '@wave/core/src/domain/tab-manager.js';
 import { ProviderRouter } from '@wave/core/src/domain/provider-router.js';
 import { runAgentLoop } from '@wave/core/src/domain/agent-loop.js';
 import type { StreamAdapter, StreamRequest } from '@wave/core/src/domain/stream-provider.js';
@@ -35,6 +37,8 @@ const adapters: Record<string, StreamAdapter> = {
 
 // CDP controller
 const cdp = new ExtBrowserController();
+const tabController = new ExtTabController();
+const tabManager = new TabManager(tabController);
 
 // ── Router Builder ──────────────────────────────────────────────
 
@@ -190,8 +194,7 @@ async function handleAgentAction(args: {
           }>(target, 'DOM.getBoxModel', { backendNodeId });
 
           if (box.model?.content) {
-            const [x1, y1, x2, _y2, x3, y3] = box.model.content;
-            const cx = (x1 + x2) / 2 + ((x3 - x1) / 2);  // Simplified
+            const [x1, y1, _x2, _y2, x3, y3] = box.model.content;
             const centerX = (x1 + x3) / 2;
             const centerY = (y1 + y3) / 2;
 
@@ -263,6 +266,30 @@ async function handleAgentAction(args: {
 
         await cdp.detach(target);
         return { success: true, action: 'navigate', url };
+      }
+
+      case 'open_tab': {
+        const tab = await tabManager.openTab(args.params.url as string);
+        await cdp.detach(target);
+        return tab;
+      }
+
+      case 'switch_tab': {
+        await tabManager.switchTab(args.params.id as string);
+        await cdp.detach(target);
+        return { success: true };
+      }
+
+      case 'close_tab': {
+        await tabManager.closeTab(args.params.id as string);
+        await cdp.detach(target);
+        return { success: true };
+      }
+
+      case 'list_tabs': {
+        const tabs = await tabManager.listTabs();
+        await cdp.detach(target);
+        return tabs;
       }
 
       default:
@@ -402,8 +429,8 @@ function handleAgentStream(port: chrome.runtime.Port) {
         onError: (err, action) => {
           console.error(`[Wave] Agent action error: ${action}`, err);
         },
-        getPageContext: (tid: number) => handleGetPageContext({ tabId: tid }),
-        captureScreenshot: (tid: number) => cdp.captureScreenshot({ id: String(tid), type: 'tab' }),
+        getPageContext: (tid: string | number) => handleGetPageContext({ tabId: Number(tid) }),
+        captureScreenshot: (tid: string | number) => cdp.captureScreenshot({ id: String(tid), type: 'tab' }),
         useVisionFallback: true, // Default to true, or load from storage
         signal: abortController.signal,
       });

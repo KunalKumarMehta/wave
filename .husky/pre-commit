@@ -1,0 +1,12 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+echo "🔍 Running pre-commit checks..."
+
+# 1. Typecheck
+pnpm -r typecheck || { echo "❌ Typecheck failed"; exit 1; }
+
+# 2. Test
+cd packages/core && npx vitest run || { echo "❌ Tests failed"; exit 1; }
+
+echo "✅ All checks passed!"

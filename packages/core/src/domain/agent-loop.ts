@@ -16,6 +16,7 @@
 
 import type { StreamAdapter, StreamRequest } from './stream-provider.js';
 import type { StreamChunk } from '../types/stream.js';
+import type { ContentPart } from '../types/message.js';
 import { ContextBuilder } from './context-builder.js';
 import { AGENT_SYSTEM_PROMPT } from './agent-tools.js';
 import { parseToolCall, isTerminalAction } from './tool-call-parser.js';
@@ -61,33 +62,42 @@ export interface AgentLoopResult {
 export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentLoopResult> {
   const {
     maxSteps, adapter, apiKey, model, tabId, query,
-    history, onChunk, onStatus, onAction, onActionConfirm, onError, getPageContext, signal,
+    history, onChunk, onStatus, onAction, onActionConfirm, onError, getPageContext, 
+    useVisionFallback, captureScreenshot, signal,
   } = config;
 
   const actions: AgentStepRecord[] = [];
-  const loopHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [
+  const loopHistory: Array<{ role: 'user' | 'assistant'; content: string | ContentPart[] }> = [
     ...history.slice(-4),
   ];
 
   let finalResponse = '';
+  let currentTabId = tabId;
 
   for (let step = 0; step < maxSteps; step++) {
     if (signal?.aborted) break;
 
     // ── OBSERVE ──
-    onStatus('extracting_page', { step });
-    const pageCtx = await getPageContext(tabId);
+    onStatus('extracting_page', { step, tabId: currentTabId });
+    const pageCtx = await getPageContext(currentTabId);
+    const allTabs = await onAction('list_tabs', {});
 
     // ── BUILD CONTEXT ──
     const contextBuilder = new ContextBuilder(8192)
       .system(AGENT_SYSTEM_PROMPT)
       .pageContext(pageCtx.markdown, pageCtx.url, pageCtx.title);
 
+    // Add tab list to context if multiple tabs exist
+    if (Array.isArray(allTabs) && allTabs.length > 1) {
+      const tabList = allTabs.map(t => `- [ID: ${t.id}] ${t.title} (${t.url})`).join('\n');
+      contextBuilder.system(`Currently open tabs:\n${tabList}\nActive Tab ID: ${currentTabId}`);
+    }
+
     // ── VISION FALLBACK ──
     if (useVisionFallback !== false && captureScreenshot && pageCtx.stats.totalNodes < 5) {
       onStatus('taking_screenshot', { reason: 'sparse_ax_tree', count: pageCtx.stats.totalNodes });
       try {
-        const screenshot = await captureScreenshot(tabId);
+        const screenshot = await captureScreenshot(currentTabId);
         if (screenshot) {
           contextBuilder.screenshot(screenshot);
         }
@@ -113,6 +123,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentLoopRe
 
     onStatus('thinking', {
       step,
+      tabId: currentTabId,
       pageStats: pageCtx.stats,
       tokenEstimate: ctx.tokenEstimate,
       droppedContext: ctx.dropped,
@@ -180,11 +191,21 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentLoopRe
 
     let result: unknown;
     try {
-      if (toolCall.action === 'navigate') {
-        onStatus('navigating', { url: params.url });
+      if (toolCall.action === 'navigate' || toolCall.action === 'open_tab') {
+        onStatus(toolCall.action === 'navigate' ? 'navigating' : 'opening_tab', { url: params.url });
       }
 
       result = await onAction(toolCall.action, params);
+
+      // Handle tab switching logic
+      if (toolCall.action === 'switch_tab' && params.id) {
+        currentTabId = params.id as string;
+        onChunk({ type: 'text_delta', content: `\n\n> 🔄 Switched to tab: ${currentTabId}` });
+      } else if (toolCall.action === 'open_tab' && (result as any)?.id) {
+        currentTabId = (result as any).id;
+        onChunk({ type: 'text_delta', content: `\n\n> 🆕 Opened new tab and switched to it: ${currentTabId}` });
+        await sleep(2000); // Wait for new tab load
+      }
 
       if (toolCall.action === 'navigate') {
         await sleep(2000); // Wait for page to load
@@ -213,7 +234,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentLoopRe
       content: `\n\n<!-- AGENT_STEP: ${JSON.stringify({ 
         step: step + 1, 
         action: toolCall.action, 
-        target: params.name || params.text || params.url || params.ref || 'target'
+        target: params.name || params.text || params.url || params.id || params.ref || 'target'
       })} -->\n\n` 
     });
   }

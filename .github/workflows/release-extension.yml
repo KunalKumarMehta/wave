@@ -1,0 +1,43 @@
+name: Release Extension
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: install dependencies
+        run: pnpm install
+
+      - name: build extension
+        run: pnpm --filter @wave/extension build
+
+      - name: package extension
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          cd apps/extension/dist
+          zip -r ../../../wave-extension-v${VERSION}.zip .
+
+      - name: upload release artifact
+        uses: softprops/action-gh-release@v2
+        with:
+          files: wave-extension-v*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

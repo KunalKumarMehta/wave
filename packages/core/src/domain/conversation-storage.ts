@@ -147,7 +147,16 @@ export function createConversationStorage(
 
       // Auto-title from first user message
       if (conv.messages.length === 1 && message.role === 'user') {
-        conv.title = message.content.slice(0, 60);
+        if (typeof message.content === 'string') {
+          conv.title = message.content.slice(0, 60);
+        } else {
+          // Extract text from content parts
+          const text = message.content
+            .filter(p => p.type === 'text')
+            .map(p => (p as any).text)
+            .join(' ');
+          conv.title = text.slice(0, 60) || 'New conversation';
+        }
       }
 
       await storageAdapter.set(convKey(id), conv);
@@ -173,9 +182,24 @@ export function createConversationStorage(
       const conv = await storageAdapter.get<Conversation>(convKey(id));
       if (!conv) return;
 
-      conv.messages = conv.messages.map((m) =>
-        m.id === messageId ? { ...m, content: m.content + content } : m
-      );
+      conv.messages = conv.messages.map((m) => {
+        if (m.id === messageId) {
+          if (typeof m.content === 'string') {
+            return { ...m, content: m.content + content };
+          } else {
+            // Append to last text part or create new one
+            const newParts = [...m.content];
+            const lastPart = newParts[newParts.length - 1];
+            if (lastPart && lastPart.type === 'text') {
+              (lastPart as any).text += content;
+            } else {
+              newParts.push({ type: 'text', text: content });
+            }
+            return { ...m, content: newParts };
+          }
+        }
+        return m;
+      });
       await storageAdapter.set(convKey(id), conv);
     },
 

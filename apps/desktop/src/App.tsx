@@ -9,6 +9,9 @@ import { NavBar } from '@wave/ui-components/src/layout/NavBar.js';
 import { ModelLoader } from '@wave/ui-components/src/layout/ModelLoader.js';
 import { localRouter } from '@wave/core/src/domain/local-router.js';
 import { NativeIPCProvider, NativeStorageProvider, NativeBrowserController } from '@wave/native-bindings';
+import { NativeTabController } from '@wave/native-bindings/src/tabs.js';
+import { TabManager } from '@wave/core/src/domain/tab-manager.js';
+import { TabBar } from '@wave/ui-components/src/layout/TabBar.js';
 import { invoke } from '@tauri-apps/api/core';
 import { useConversationManager, generateId, isPageQuery, CHAT_SYSTEM_PROMPT, TITLE_SYSTEM_PROMPT } from '@wave/core';
 import type { Message } from '@wave/core';
@@ -26,6 +29,8 @@ import { serializeAXTree } from '@wave/core/src/domain/ax-serializer.js';
 const ipc = new NativeIPCProvider();
 const storage = new NativeStorageProvider();
 const cdp = new NativeBrowserController();
+const cdpTabs = new NativeTabController();
+const tabManager = new TabManager(cdpTabs);
 
 const ui = {
   environment: 'desktop' as const,
@@ -143,6 +148,26 @@ async function handleAgentAction(tabId: string | number, action: string, params:
         await cdp.detach(target);
         return { success: true, action: 'scroll' };
       }
+      case 'open_tab': {
+        const tab = await tabManager.openTab(params.url as string);
+        await cdp.detach(target);
+        return tab;
+      }
+      case 'switch_tab': {
+        await tabManager.switchTab(params.id as string);
+        await cdp.detach(target);
+        return { success: true };
+      }
+      case 'close_tab': {
+        await tabManager.closeTab(params.id as string);
+        await cdp.detach(target);
+        return { success: true };
+      }
+      case 'list_tabs': {
+        const tabs = await tabManager.listTabs();
+        await cdp.detach(target);
+        return tabs;
+      }
       default:
         await cdp.detach(target);
         return { error: `Unknown action: ${action}` };
@@ -166,6 +191,36 @@ function App() {
   const [localModelLoading, setLocalModelLoading] = useState(false);
   const [localModelProgress, setLocalModelProgress] = useState(0);
   const [useLocalModel, setUseLocalModel] = useState(false);
+  const [tabs, setTabs] = useState<any[]>([]);
+  const [activeTabId, setActiveTabId] = useState<string | null>('browser');
+
+  const refreshTabs = useCallback(async () => {
+    const allTabs = await tabManager.listTabs();
+    setTabs(allTabs);
+    setActiveTabId(tabManager.getCurrentTabId() || 'browser');
+  }, []);
+
+  useEffect(() => {
+    refreshTabs();
+    const interval = setInterval(refreshTabs, 5000);
+    return () => clearInterval(interval);
+  }, [refreshTabs]);
+
+  const handleTabSwitch = async (id: string) => {
+    await tabManager.switchTab(id);
+    setActiveTabId(id);
+    await refreshTabs();
+  };
+
+  const handleTabClose = async (id: string) => {
+    await tabManager.closeTab(id);
+    await refreshTabs();
+  };
+
+  const handleNewTab = async () => {
+    await tabManager.openTab('https://www.google.com');
+    await refreshTabs();
+  };
 
   useEffect(() => {
     storage.config.get<boolean>('skipLocalModel').then((skip) => {
@@ -193,7 +248,7 @@ function App() {
     const updateBounds = () => {
       if (!browserPaneRef.current) return;
       const rect = browserPaneRef.current.getBoundingClientRect();
-      const navHeight = 48; // NavBar height
+      const navHeight = 48 + 36; // NavBar (48) + TabBar (36)
       invoke('set_browser_bounds', {
         x: Math.round(rect.x),
         y: Math.round(rect.y + navHeight),
@@ -321,7 +376,15 @@ function App() {
           history: mgr.messages.slice(-6).map((m) => ({ role: m.role as any, content: m.content })),
           onChunk: (chunk: any) => {
             if (chunk.type === 'text_delta') {
-              mgr.setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, content: m.content.startsWith('🔍') || m.content.startsWith('🧠') ? chunk.content : m.content + chunk.content } : m));
+              mgr.setMessages((prev) => prev.map((m) => {
+                if (m.id !== assistantMsg.id) return m;
+                const current = m.content;
+                const isStatus = typeof current === 'string' && (current.startsWith('🔍') || current.startsWith('🧠'));
+                return {
+                  ...m,
+                  content: isStatus ? chunk.content : (typeof current === 'string' ? current + chunk.content : chunk.content),
+                };
+              }));
             } else if (chunk.type === 'done' && chunk.metadata?.usage) {
               costTracker.record({ provider: mgr.activeProvider, model: mgr.activeModel, promptTokens: chunk.metadata.usage.promptTokens ?? 0, completionTokens: chunk.metadata.usage.completionTokens ?? 0, timestamp: Date.now() });
               mgr.refreshCost();
@@ -350,6 +413,7 @@ function App() {
           useVisionFallback: true, // Default to true, or load from storage if we had it in scope
           signal: abortControllerRef.current.signal,
         });
+        await refreshTabs();
       } else {
         const routes: ProviderRoute[] = [{ provider: mgr.activeProvider, adapter: adapters[mgr.activeProvider], apiKey }];
         const router = new ProviderRouter({ routes, maxRetries: 1 });
@@ -363,7 +427,14 @@ function App() {
           ]
         }, (chunk: any) => {
           if (chunk.type === 'text_delta') {
-            mgr.setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, content: m.content + chunk.content } : m));
+            mgr.setMessages((prev) => prev.map((m) => {
+              if (m.id !== assistantMsg.id) return m;
+              const current = m.content;
+              return {
+                ...m,
+                content: typeof current === 'string' ? current + chunk.content : chunk.content,
+              };
+            }));
           } else if (chunk.type === 'error') {
             mgr.setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, content: `Error: ${chunk.content}`, isStreaming: false } : m));
           } else if (chunk.type === 'done' && chunk.metadata?.usage) {
@@ -393,6 +464,13 @@ function App() {
       <div className="split-pane">
         <div ref={browserPaneRef} className="browser-pane">
           <NavBar />
+          <TabBar 
+            tabs={tabs} 
+            activeTabId={activeTabId} 
+            onTabSwitch={handleTabSwitch} 
+            onTabClose={handleTabClose} 
+            onNewTab={handleNewTab} 
+          />
           {/* Native webview will be rendered over this area by Tauri */}
           <div className="browser-placeholder">
             <div className="browser-placeholder__msg">

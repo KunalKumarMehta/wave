@@ -6,9 +6,10 @@
  */
 
 import type { StreamChunk } from '../types/stream.js';
+import type { ContentPart } from '../types/message.js';
 
 export interface StreamRequest {
-  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string | ContentPart[] }>;
   model: string;
   maxTokens?: number;
   temperature?: number;

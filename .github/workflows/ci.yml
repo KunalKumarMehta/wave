@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+      
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Typecheck
+        run: pnpm -r typecheck
+
+      - name: Run tests
+        run: cd packages/core && npx vitest run
+
+      - name: Verify test count
+        run: |
+          TEST_COUNT=$(cd packages/core && npx vitest run --reporter=json | jq '.numTotalTests')
+          echo "Test count: $TEST_COUNT"
+          if [ "$TEST_COUNT" -lt 60 ]; then
+            echo "Error: Test count is less than 60"
+            exit 1
+          fi
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build Extension
+        run: pnpm --filter @wave/extension build
+
+      - name: Check Extension Bundle Size
+        run: |
+          SIZE=$(du -b apps/extension/dist/assets/lib-*.js | cut -f1)
+          # Sprint 21 fixed the 6MB bloat, target is < 500KB gzipped.
+          # Here we check raw size of the main lib chunk as a proxy.
+          # If it's over 1MB raw, it might be too big.
+          if [ "$SIZE" -gt 1048576 ]; then
+            echo "Error: Extension bundle size is too large ($SIZE bytes)"
+            exit 1
+          fi
+
+      - name: Build Desktop Frontend
+        run: cd apps/desktop && npx vite build

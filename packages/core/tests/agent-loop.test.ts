@@ -26,7 +26,10 @@ describe('Agent Loop', () => {
     history: [],
     onChunk: vi.fn(),
     onStatus: vi.fn(),
-    onAction: vi.fn(),
+    onAction: vi.fn().mockImplementation((action: string) => {
+      if (action === 'list_tabs') return Promise.resolve([]);
+      return Promise.resolve({ success: true });
+    }),
     getPageContext: vi.fn().mockResolvedValue(mockPageContext),
   });
 
@@ -85,7 +88,10 @@ describe('Agent Loop', () => {
         onChunk({ type: 'text_delta', content: 'ACTION: done()' });
       });
 
-    config.onAction.mockRejectedValue(new Error('Click failed'));
+    config.onAction.mockImplementation((action: string) => {
+      if (action === 'list_tabs') return Promise.resolve([]);
+      return Promise.reject(new Error('Click failed'));
+    });
 
     const result = await runAgentLoop(config);
     expect(result.steps).toBe(1);
@@ -122,7 +128,7 @@ describe('Agent Loop', () => {
     const result = await runAgentLoop({ ...config, onActionConfirm });
     expect(result.steps).toBe(0);
     expect(onActionConfirm).toHaveBeenCalled();
-    expect(config.onAction).not.toHaveBeenCalled();
+    expect(config.onAction).not.toHaveBeenCalledWith('click', expect.anything());
     expect(config.onChunk).toHaveBeenCalledWith(expect.objectContaining({ content: expect.stringContaining('Action denied') }));
   });
 
@@ -148,7 +154,10 @@ describe('Agent Loop', () => {
     });
 
     const onError = vi.fn();
-    config.onAction.mockRejectedValue(new Error('Fatal error'));
+    config.onAction.mockImplementation((action: string) => {
+      if (action === 'list_tabs') return Promise.resolve([]);
+      return Promise.reject(new Error('Fatal error'));
+    });
 
     // Force break after 1 step to avoid infinite loop in test
     config.maxSteps = 1;

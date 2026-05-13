@@ -1,4 +1,4 @@
-import React from 'react';
+
 import './DataTable.css';
 
 interface DataTableProps {

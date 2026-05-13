@@ -53,6 +53,49 @@ export const AGENT_TOOLS = [
     },
   },
   {
+    name: 'open_tab',
+    description: 'Open a new browser tab with the specified URL.',
+    parameters: {
+      type: 'object' as const,
+      properties: {
+        url: { type: 'string', description: 'Full URL to open' },
+        description: { type: 'string', description: 'Why you are opening this tab' },
+      },
+      required: ['url', 'description'],
+    },
+  },
+  {
+    name: 'switch_tab',
+    description: 'Switch to a different open tab by its ID.',
+    parameters: {
+      type: 'object' as const,
+      properties: {
+        id: { type: 'string', description: 'Tab ID from list_tabs' },
+        description: { type: 'string', description: 'Why you are switching to this tab' },
+      },
+      required: ['id', 'description'],
+    },
+  },
+  {
+    name: 'close_tab',
+    description: 'Close an open tab by its ID.',
+    parameters: {
+      type: 'object' as const,
+      properties: {
+        id: { type: 'string', description: 'Tab ID to close' },
+      },
+      required: ['id'],
+    },
+  },
+  {
+    name: 'list_tabs',
+    description: 'Get a list of all currently open tabs with their IDs and titles.',
+    parameters: {
+      type: 'object' as const,
+      properties: {},
+    },
+  },
+  {
     name: 'done',
     description: 'Signal that the task is complete. Include a summary of what was accomplished.',
     parameters: {
@@ -65,19 +108,18 @@ export const AGENT_TOOLS = [
   },
 ];
 
-export const AGENT_SYSTEM_PROMPT = `You are Wave, an AI browser agent. You can see and interact with the current web page.
+export const AGENT_SYSTEM_PROMPT = `You are Wave, an AI browser agent. You can see and interact with multiple browser tabs.
 
 You will receive:
 1. The page URL and title (use these to identify the site — NEVER guess the site from the page structure alone)
 2. The page's accessibility tree showing visible elements. Each interactive element has a [ref=eN] tag.
+3. A list of all currently open tabs (if more than one).
 
 CRITICAL RULES — FOLLOW STRICTLY:
 - ONLY describe elements that appear in the provided accessibility tree. NEVER invent, hallucinate, or assume content that is not explicitly listed.
-- If the tree shows navigation links like "Today's Deals" and "Gift Cards", report exactly those — do not add items from your training data.
-- If you cannot determine specific content (e.g. product names, images), say "the page shows several items/images" rather than guessing specific names.
-- Always identify the page by its provided URL, never by guessing from structure.
 - Use the exact ref values from the page structure for any actions.
-- If you can't find the right element, say so rather than guessing.
+- Use the exact tab IDs from the tab list for switching or closing tabs.
+- Emit ONLY ONE action per response. After each action you will receive the updated page state.
 
 ACTION FORMAT:
 When you need to act on the page, first briefly explain what you're doing and why, then emit exactly ONE action as a JSON block:
@@ -88,13 +130,16 @@ When you need to act on the page, first briefly explain what you're doing and wh
 
 Available actions:
 - click: \`{"action": "click", "ref": "eN", "description": "why"}\`
-- type: \`{"action": "type", "ref": "eN", "text": "content to type", "description": "why"}\`
+- type: \`{"action": "type", "ref": "eN", "text": "content", "description": "why"}\`
 - scroll: \`{"action": "scroll", "direction": "down|up", "description": "why"}\`
 - navigate: \`{"action": "navigate", "url": "https://...", "description": "why"}\`
-- done: \`{"action": "done", "summary": "what was accomplished"}\`
+- open_tab: \`{"action": "open_tab", "url": "https://...", "description": "why"}\`
+- switch_tab: \`{"action": "switch_tab", "id": "tabId", "description": "why"}\`
+- close_tab: \`{"action": "close_tab", "id": "tabId"}\`
+- list_tabs: \`{"action": "list_tabs"}\`
+- done: \`{"action": "done", "summary": "summary"}\`
 
 RULES FOR ACTIONS:
-- Emit ONLY ONE action per response. After each action you will receive the updated page state.
-- When the task is complete (or if it only requires describing the page), emit done.
-- If a task requires no page interaction (just answering a question about what's visible), respond normally and emit done.
-- NEVER emit multiple action blocks in one response.`;
+- When a task requires multiple sites (e.g. comparing prices), open new tabs and switch between them.
+- After opening a tab, you will need to switch to it to see its content.
+- When the task is complete, emit done.`;

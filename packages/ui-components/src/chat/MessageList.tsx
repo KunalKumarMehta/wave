@@ -38,10 +38,35 @@ export function MessageList({ messages }: MessageListProps) {
               {msg.role === 'user' ? 'You' : 'Wave'}
             </div>
             <div className="message__content">
-              {msg.role === 'assistant' ? (
-                <MarkdownRenderer content={msg.content} />
+              {typeof msg.content === 'string' ? (
+                msg.role === 'assistant' ? (
+                  <MarkdownRenderer content={msg.content} />
+                ) : (
+                  msg.content
+                )
               ) : (
-                msg.content
+                <div className="message__parts">
+                  {msg.content.map((part, i) => {
+                    if (part.type === 'text') {
+                      return msg.role === 'assistant' ? (
+                        <MarkdownRenderer key={i} content={part.text} />
+                      ) : (
+                        <div key={i}>{part.text}</div>
+                      );
+                    }
+                    if (part.type === 'image') {
+                      return (
+                        <img 
+                          key={i} 
+                          src={`data:${part.mimeType};base64,${part.data}`} 
+                          alt="Visual context" 
+                          className="message__image"
+                        />
+                      );
+                    }
+                    return null;
+                  })}
+                </div>
               )}
               {msg.isStreaming && <span className="message__cursor" />}
             </div>
