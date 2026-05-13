@@ -8,6 +8,8 @@
   gap: 4px;
   flex: 1;
   padding-bottom: 8px;
+  min-height: 0;
+  scroll-behavior: smooth;
 }
 
 .message-list__empty {

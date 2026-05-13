@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { NavBar } from '@wave/ui-components/src/layout/NavBar.js';
 import { PlatformProvider } from '@wave/ui-components';
 import { invoke } from '@tauri-apps/api/core';
@@ -39,16 +39,24 @@ describe('NavBar Navigation', () => {
   });
 
   it('should display the current URL', async () => {
-    vi.mocked(invoke).mockResolvedValue('https://current-page.com');
-    
+    vi.useFakeTimers();
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === 'get_browser_url') return Promise.resolve('https://current-page.com');
+      return Promise.resolve(undefined);
+    });
+
     render(
       <PlatformProvider ipc={mockIpc as any} storage={mockStorage as any} ui={mockUi as any}>
         <NavBar />
       </PlatformProvider>
     );
 
-    await vi.waitFor(() => {
-      expect(screen.getByText('https://current-page.com')).toBeInTheDocument();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
     });
+
+    expect(screen.getByText('https://current-page.com')).toBeTruthy();
+
+    vi.useRealTimers();
   });
 });

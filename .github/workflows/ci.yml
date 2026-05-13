@@ -57,12 +57,29 @@ jobs:
 
       - name: Check Extension Bundle Size
         run: |
-          SIZE=$(du -b apps/extension/dist/assets/lib-*.js | cut -f1)
-          # Sprint 21 fixed the 6MB bloat, target is < 500KB gzipped.
-          # Here we check raw size of the main lib chunk as a proxy.
-          # If it's over 1MB raw, it might be too big.
-          if [ "$SIZE" -gt 1048576 ]; then
-            echo "Error: Extension bundle size is too large ($SIZE bytes)"
+          set -euo pipefail
+          shopt -s nullglob
+          # App-critical chunks only (exclude lazy-loaded WebLLM `index-*.js`).
+          mapfile -t CHUNKS < <(printf '%s\n' \
+            apps/extension/dist/assets/sidepanel.html-*.js \
+            apps/extension/dist/assets/core-*.js \
+            apps/extension/dist/assets/vendor-react-*.js)
+          if [ "${#CHUNKS[@]}" -eq 0 ]; then
+            echo "Error: No critical extension chunks matched in dist/assets/"
+            ls -la apps/extension/dist/assets/ || true
+            exit 1
+          fi
+          TOTAL=0
+          for f in "${CHUNKS[@]}"; do
+            SIZE=$(wc -c < "$f" | tr -d ' ')
+            echo "$f: $SIZE bytes"
+            TOTAL=$((TOTAL + SIZE))
+          done
+          echo "Combined critical chunks: $TOTAL bytes (lazy index-*.js excluded)"
+          # ~260KB raw typical; allow headroom under 1.5 MiB combined.
+          LIMIT=1572864
+          if [ "$TOTAL" -gt "$LIMIT" ]; then
+            echo "Error: Extension critical bundle size is too large ($TOTAL bytes > $LIMIT)"
             exit 1
           fi
 

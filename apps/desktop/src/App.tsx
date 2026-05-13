@@ -193,6 +193,7 @@ function App() {
   const [useLocalModel, setUseLocalModel] = useState(false);
   const [tabs, setTabs] = useState<any[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>('browser');
+  const [tabBarError, setTabBarError] = useState<string | null>(null);
 
   const refreshTabs = useCallback(async () => {
     const allTabs = await tabManager.listTabs();
@@ -209,17 +210,25 @@ function App() {
   const handleTabSwitch = async (id: string) => {
     await tabManager.switchTab(id);
     setActiveTabId(id);
+    setTabBarError(null);
     await refreshTabs();
   };
 
   const handleTabClose = async (id: string) => {
     await tabManager.closeTab(id);
+    setTabBarError(null);
     await refreshTabs();
   };
 
   const handleNewTab = async () => {
-    await tabManager.openTab('https://www.google.com');
-    await refreshTabs();
+    try {
+      await tabManager.openTab('https://www.google.com');
+      setTabBarError(null);
+      await refreshTabs();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Could not open a new tab';
+      setTabBarError(msg);
+    }
   };
 
   useEffect(() => {
@@ -469,7 +478,9 @@ function App() {
             activeTabId={activeTabId} 
             onTabSwitch={handleTabSwitch} 
             onTabClose={handleTabClose} 
-            onNewTab={handleNewTab} 
+            onNewTab={handleNewTab}
+            errorMessage={tabBarError}
+            onDismissError={() => setTabBarError(null)}
           />
           {/* Native webview will be rendered over this area by Tauri */}
           <div className="browser-placeholder">

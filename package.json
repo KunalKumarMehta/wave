@@ -8,12 +8,15 @@
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "verify": "pnpm typecheck && pnpm test && pnpm build",
+    "icons:gen": "node scripts/gen-extension-icons.mjs",
     "prepare": "husky"
   },
   "engines": {
     "node": ">=20.0.0"
   },
   "devDependencies": {
-    "husky": "^9.1.7"
+    "husky": "^9.1.7",
+    "png-to-ico": "2.1.8",
+    "sharp": "0.33.5"
   }
 }

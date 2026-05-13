@@ -19,12 +19,20 @@ export interface TabController {
 export class TabManager {
   private controller: TabController;
   private currentTabId: string | null = null;
+  private maxTabs: number;
 
-  constructor(controller: TabController) {
+  constructor(controller: TabController, maxTabs = 10) {
     this.controller = controller;
+    this.maxTabs = maxTabs;
   }
 
   async openTab(url: string): Promise<Tab> {
+    const tabs = await this.controller.listTabs();
+    if (tabs.length >= this.maxTabs) {
+      throw new Error(
+        `Wave supports at most ${this.maxTabs} open tabs. Close a tab before opening a new one.`,
+      );
+    }
     const tab = await this.controller.openTab(url);
     this.currentTabId = tab.id;
     return tab;

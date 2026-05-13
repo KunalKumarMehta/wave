@@ -141,6 +141,7 @@ body {
   padding: 12px 14px;
   display: flex;
   flex-direction: column;
+  scroll-behavior: smooth;
 }
 
 /* Scrollbar */

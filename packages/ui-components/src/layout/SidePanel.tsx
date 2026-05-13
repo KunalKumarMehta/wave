@@ -1,6 +1,7 @@
 import React from 'react';
 import { CostBadge } from './CostBadge.js';
 import './SidePanel.css';
+import '../styles/accessibility.css';
 
 interface SidePanelProps {
   children: React.ReactNode;
