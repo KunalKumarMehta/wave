@@ -98,3 +98,42 @@ All notable changes to Wave are documented here.
 - Auto-titling from first user message (truncated to 60 chars)
 - History hamburger button in Side Panel header
 - 16 new unit tests for conversation storage (54 total)
+
+## [0.4.0] — 2026-05-12
+
+### Added
+
+#### Enhanced Conversations (Sprint 11)
+- LLM-generated conversation titles via background cloud-stream
+- Conversation export (download all as JSON) and import (bulk restore)
+- Conversation pinning — pin important chats to top of drawer
+- IndexedDB migration prep in `createConversationStorage` structure
+
+#### Native Bindings (Sprint 12)
+- `NativeIPCProvider` — Tauri event/listen bridge
+- `NativeStorageProvider` — `tauri-plugin-store` backed config + in-memory secure storage
+- `NativeBrowserController` — CDP via WebSocket to `localhost:9222`
+
+#### Tauri Desktop App (Sprint 13-14)
+- Full `apps/desktop` scaffold with Vite + React + Tauri v2
+- Tauri config with secure CSP allowing LLM API endpoints
+- System tray icon with click-to-toggle visibility
+- Global keyboard shortcut: `Cmd+Shift+Space` to show/hide
+- Wave UI ported: SidePanel, ConversationDrawer, Settings, MarkdownRenderer
+- Native agent loop using direct adapter calls (no Chrome ports)
+
+## [0.5.0] — 2026-05-13
+
+### Changed
+
+#### Shared Hooks Refactor (Sprint 15)
+- Extracted `useConversationManager` hook (239 LOC) — conversation lifecycle, settings, cost
+- Extracted `chat-utils.ts` — `generateId()`, `isPageQuery()`, shared system prompts
+- Refactored `sidepanel.tsx` from 569 → 356 LOC (-37%)
+- Refactored `App.tsx` from 449 → 314 LOC (-30%)
+- React added as peerDependency of `@wave/core`
+
+### Documentation
+- Project course audit with PRD alignment check
+- PRD v0.4, SAD v0.3, HANDOFF v3, .context v2
+- `SPRINT_PROMPTS.md` — detailed prompts for Sprint 16–20

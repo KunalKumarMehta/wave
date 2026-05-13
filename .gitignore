@@ -41,6 +41,7 @@ Thumbs.db
 !.context.md
 !Product Requirements Document.md
 !Software Architecture Document.md
+!SPRINT_PROMPTS.md
 
 # pnpm
 .pnpm-debug.log

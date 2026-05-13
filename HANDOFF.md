@@ -1,254 +1,148 @@
 # Wave — Session Handoff Document
 
-> **Session Date:** 2026-05-10/11  
-> **Commits:** `a54b39e` → current (Sprint 1–10)  
-> **Status:** Multi-conversation support — full CRUD, drawer UI, search, auto-titling
+> **Last Updated:** 2026-05-13  
+> **Commits:** 11 (`a54b39e` → `215e060`)  
+> **Status:** Sprint 15 complete — shared hooks refactor, both platforms clean  
+> **LOC:** 7,526 source · 132 tracked files · 54 tests (100% passing)
 
 ---
 
-## 1. What Was Built This Session
+## 1. Sprint History
 
-### Sprint 1 — Core Scaffold
-- pnpm monorepo with 4 packages + 1 app
-- Platform abstractions (IPC, Storage, CDP, UI, Inference)
-- Zustand stores (conversation, settings)
-- AES-256-GCM encryption for API keys
-- MV3 extension scaffold (CRXJS + Vite)
-
-### Sprint 2 — Streaming Pipeline
-- Unified `StreamAdapter` interface
-- 3 provider adapters: **OpenAI** (SSE), **Anthropic** (event stream), **Gemini** (alt=sse)
-- Port-based streaming: Service Worker → Side Panel via `chrome.runtime.connect`
-- Settings UI with provider grid + API key management
-
-### Sprint 3 — Generative UI
-- Custom Markdown renderer (zero dependencies, 181 LOC)
-- Code blocks with syntax labels + copy button
-- Component registry: `DataTable`, `GenericCard`, `FallbackComponent`
-- Tool-call dispatch system for LLM outputs
-
-### Sprint 4 — Page Agent (AX Tree)
-- Chrome debugger CDP wrapper (`chrome.debugger.attach/sendCommand/detach`)
-- AX tree serializer: full tree → Markdown+refs (~93% token reduction)
-- Context builder: priority-based token budget allocation
-- Agent system prompt with anti-hallucination rules
-
-### Sprint 5 — Agent Actions
-- CDP action dispatcher: `click`, `type`, `scroll`, `navigate`
-- Box model resolution for coordinate-based clicking
-- DOM.focus + Input.insertText for text entry
-
-### Sprint 6 — Provider Router + Cost Tracking
-- Multi-provider failover with retry + linear backoff on 429
-- Per-model pricing matrix (OpenAI/Anthropic/Gemini, 12 models)
-- CostBadge UI component in header
-- Session budget enforcement
-
-### Sprint 7 — Polish
-- README.md with architecture + quick start
-- 23 unit tests (AX serializer 9, context builder 6, cost tracker 8)
-- Tab-targeting fix (`lastFocusedWindow` + HTTP URL filter)
-- New Chat button (clears messages + resets cost)
-- Message persistence via `chrome.storage.local`
-
-### Sprint 8 — Agent Loop + Provider Router
-- **Multi-step agent loop**: OBSERVE → THINK → ACT → repeat until `done()` or max 5 steps
-- **Tool call parser**: JSON block + inline `ACTION:` fallback (109 LOC, 15 tests)
-- **Agent loop engine**: state machine with page re-extraction between steps (170 LOC)
-- **ProviderRouter wired**: auto-failover on 429/5xx, dynamic route building from stored keys
-- **Anthropic usage fix**: `promptTokens` now captured from `message_start` event
-- **Agent system prompt**: updated for structured JSON action blocks
-
-### Sprint 9 — UX Polish + Markdown
-- **Markdown tables**: full `| col | col |` parsing with column alignment
-- **Ordered lists**: `1. item` → `<ol>` with accent-colored counters
-- **Blockquotes**: `> text` → accent-bordered quote blocks
-- **Horizontal rules**: `---` → gradient accent line separator
-- **Agent action UI**: `⚡ Executing: click...` status during multi-step loops
-
-### Sprint 10 — Multi-Conversation Support
-- **Conversation storage layer**: `createConversationStorage()` with index + per-conversation keys
-- **ConversationDrawer**: slide-out panel with search, time-ago formatting, two-click delete
-- **Multi-conversation sidepanel**: conversation switching, auto-persistence, active ID tracking
-- **Auto-titling**: first user message → conversation title (truncated to 60 chars)
-- **16 unit tests**: create, list, addMessage, updateMessage, appendToMessage, delete, clear, search
-
-### Sprint 11 — Enhanced Conversation Features
-- **LLM-generated conversation titles**: Summarizes the first user exchange via a background `cloud-stream` port request automatically.
-- **Conversation export/import**: Download all conversations as JSON and bulk import them.
-- **Conversation pinning**: Toggle `pinned` flag to keep important chats fixed at the top of the conversation drawer.
-- **IndexedDB migration prep**: `createConversationStorage` structure is ready for migration if Local Storage limits are reached.
-
-### Sprint 12 — Tauri Migration Prep
-- **Platform Abstraction (Native)**: Implemented `NativeIPCProvider`, `NativeStorageProvider`, and a WebSocket-based `NativeBrowserController` in the `native-bindings` package.
-- **Tauri v2 API Integration**: Leveraged `@tauri-apps/api/core` (v2) and `tauri-plugin-store` for native capability parity with the Chrome extension.
-
-### Sprint 13 — Tauri Desktop App Scaffold
-- **Monorepo Integration**: Successfully wired `@wave/core`, `@wave/ui-components`, and `@wave/native-bindings` into the `apps/desktop` React build.
-- **Tauri v2 Config**: Configured `tauri.conf.json` with secure CSP (allowing LLM API endpoints) and optimized window dimensions (420x700).
-- **Rust Plugin Registration**: Registered `tauri-plugin-store` in the Rust backend and granted explicit capabilities in `default.json`.
-- **Frontend Port**: Replaced the default Vite scaffold with the Wave `SidePanel` component using the new native providers.
-
-### Sprint 14 — Native Agent Loop Implementation
-- **Native BrowserController**: Configured CDP interface using WebSockets over port `9222` to interface with the Chromium debugging API seamlessly.
-- **Ported Service Worker**: Moved the entire `runAgentLoop` and Provider orchestration directly into `App.tsx`, bypassing the need for Chrome Ports and completely deprecating the Extension `background.ts` service worker architecture in the Tauri desktop environment.
-- **Native OS Integrations**: Included `tauri-plugin-global-shortcut` and `tauri::tray::TrayIconBuilder` to add a global show/hide hotkey (`Cmd+Shift+Space`) and a persistent system tray icon with visibility toggling.
+| Sprint | Commit | What Was Built |
+|--------|--------|---------------|
+| 1-6 | `a54b39e` | Core scaffold, streaming pipeline, generative UI, page agent, agent actions, cost tracking |
+| 7 | `beaec13` | README, 23 tests, tab-targeting fix, new chat, message persistence |
+| 8-9 | `e3e1db8` | Agent loop engine, tool call parser, provider router wired, markdown polish |
+| 10 | `576ede5` | Multi-conversation support (CRUD, drawer, search, auto-titling) |
+| 11 | `4a6d7d4` | LLM titles, export/import, pinning, Tauri scaffold, native bindings |
+| 12-14 | `c8b6f2a` | Tauri desktop app, native CDP/IPC/storage, system tray, global shortcuts |
+| 15 | `215e060` | Shared hooks refactor — `useConversationManager` + `chat-utils` |
 
 ---
 
 ## 2. Current File Structure
 
 ```
-wave/                              # Root
-├── package.json                   # pnpm workspace root
-├── pnpm-workspace.yaml            # Workspace config
-├── tsconfig.base.json             # Shared TS config
-├── README.md                      # Project docs
-├── HANDOFF.md                     # ← You are here
-├── LEARNINGS.md                   # Technical learnings
-├── AGENTS.md                      # Agent architecture
-│
-├── Knowledge Base/                # Pre-existing research (not code)
-│   ├── wave 1-4/                  # Earlier research phases
-│   └── wave 5/                    # Current phase research
+wave/
+├── package.json, pnpm-workspace.yaml, tsconfig.base.json
+├── README.md, HANDOFF.md, LEARNINGS.md, AGENTS.md, CHANGELOG.md
+├── KB_INDEX.md, .context.md
+├── Product Requirements Document.md (v0.3)
+├── Software Architecture Document.md (v0.3)
 │
 ├── apps/
-│   └── extension/                 # Chrome Extension (MV3)
-│       ├── manifest.json          # Permissions, service worker, side panel
-│       ├── sidepanel.html         # Entry HTML
-│       ├── src/
-│       │   ├── background.ts      # Service worker (354 LOC) — router, CDP, streams
-│       │   └── sidepanel.tsx      # Side Panel UI (350 LOC) — React app
-│       ├── vite.config.ts         # CRXJS + React
-│       └── dist/                  # Build output (load this in Chrome)
+│   ├── extension/                 # Chrome Extension (MV3)
+│   │   ├── manifest.json
+│   │   ├── src/background.ts      # Service worker (450 LOC)
+│   │   ├── src/sidepanel.tsx      # Side Panel UI (356 LOC) ← uses shared hook
+│   │   └── dist/                  # Build output
+│   │
+│   └── desktop/                   # Tauri v2 Desktop App
+│       ├── src/App.tsx            # Desktop UI (314 LOC) ← uses shared hook
+│       ├── src-tauri/src/lib.rs   # Rust backend (69 LOC)
+│       └── src-tauri/tauri.conf.json
 │
 ├── packages/
-│   ├── core/                      # Platform-agnostic domain logic
-│   │   ├── src/
-│   │   │   ├── abstractions/      # Interfaces: cdp, ipc, storage, ui, inference
-│   │   │   ├── domain/
-│   │   │   │   ├── adapters/      # openai.ts, anthropic.ts, gemini.ts
-│   │   │   │   ├── agent-tools.ts # Tool defs + system prompt
-│   │   │   │   ├── agent-loop.ts  # Multi-step agent engine (170 LOC)
-│   │   │   │   ├── tool-call-parser.ts # JSON/inline action parser (109 LOC)
-│   │   │   │   ├── ax-serializer.ts # AX tree → Markdown+refs (197 LOC)
-│   │   │   │   ├── context-builder.ts # Token budget allocation (133 LOC)
-│   │   │   │   ├── cost-tracker.ts # Per-model pricing (112 LOC)
-│   │   │   │   ├── conversation-storage.ts # Conversation CRUD layer (168 LOC)
-│   │   │   │   ├── provider-router.ts # Failover chain (133 LOC)
-│   │   │   │   └── stream-provider.ts # StreamAdapter interface
-│   │   │   ├── state/             # conversation.ts, settings.ts (Zustand)
-│   │   │   └── types/             # message.ts, stream.ts
-│   │   └── tests/                 # 54 vitest tests
+│   ├── core/                      # Platform-agnostic domain logic (2,100+ LOC)
+│   │   ├── src/abstractions/      # Interfaces: cdp, ipc, storage, ui, inference
+│   │   ├── src/domain/
+│   │   │   ├── adapters/          # openai.ts, anthropic.ts, gemini.ts
+│   │   │   ├── agent-loop.ts      # Multi-step observe-think-act (188 LOC)
+│   │   │   ├── agent-tools.ts     # Tool defs + agent system prompt
+│   │   │   ├── tool-call-parser.ts # JSON/inline action parser (108 LOC)
+│   │   │   ├── ax-serializer.ts   # AX tree → Markdown+refs (197 LOC)
+│   │   │   ├── context-builder.ts # Token budget allocation (133 LOC)
+│   │   │   ├── conversation-storage.ts # Conversation CRUD (250 LOC)
+│   │   │   ├── cost-tracker.ts    # Per-model pricing (113 LOC)
+│   │   │   ├── provider-router.ts # Failover chain (133 LOC)
+│   │   │   └── stream-provider.ts # StreamAdapter interface
+│   │   ├── src/hooks/             # ← NEW in Sprint 15
+│   │   │   ├── useConversationManager.ts  # Shared conversation lifecycle (239 LOC)
+│   │   │   └── chat-utils.ts      # generateId, isPageQuery, prompts (28 LOC)
+│   │   ├── src/state/             # Zustand stores
+│   │   ├── src/types/             # message.ts, stream.ts
+│   │   └── tests/                 # 54 vitest tests (5 suites)
 │   │
-│   ├── ext-bindings/              # Chrome Extension implementations
-│   │   └── src/
-│   │       ├── cdp.ts             # chrome.debugger wrapper
-│   │       ├── crypto.ts          # AES-256-GCM
-│   │       ├── ipc.ts             # chrome.runtime messaging
-│   │       └── storage.ts         # chrome.storage.local/session
-│   │
-│   ├── ui-components/             # Shared React components
-│   │   └── src/
-│   │       ├── chat/              # InputBar, MessageList, MarkdownRenderer
-│   │       ├── generative/        # DataTable, GenericCard, ComponentRegistry
-│   │       ├── layout/            # SidePanel, SettingsView, CostBadge, ConversationDrawer
-│   │       └── context/           # PlatformContext (React context)
-│   │
-│   └── native-bindings/           # Tauri bindings (stub only)
+│   ├── ext-bindings/              # Chrome Extension implementations (381 LOC)
+│   ├── native-bindings/           # Tauri implementations (228 LOC)
+│   └── ui-components/             # Shared React components (1,200+ LOC)
+│       ├── chat/                  # InputBar, MessageList, MarkdownRenderer
+│       ├── generative/            # DataTable, GenericCard, ComponentRegistry
+│       └── layout/                # SidePanel, SettingsView, CostBadge, ConversationDrawer
 ```
 
 ---
 
-## 3. How to Resume Development
+## 3. How to Run
 
 ```bash
-# Enter the project
 cd ~/Desktop/code/wave
-
-# Install (if needed)
 pnpm install
 
-# Build the extension
-pnpm --filter @wave/extension build
+# Extension
+pnpm --filter @wave/extension build     # Build → load dist/ in chrome://extensions
+pnpm --filter @wave/extension dev       # Dev mode with watch
 
-# Run tests
-pnpm test  # or: cd packages/core && npx vitest run
+# Desktop
+cd apps/desktop && pnpm tauri dev       # Tauri dev mode
 
-# Load in Chrome
-# 1. chrome://extensions → Developer mode
-# 2. Load unpacked → select apps/extension/dist/
-# 3. Click Wave icon → Side Panel opens
-# 4. Settings (⚙) → Set API key → Chat
+# Tests
+cd packages/core && npx vitest run      # 54 tests
 ```
 
 ---
 
-## 4. Key Dependencies & Versions
+## 4. Active Bugs & Known Issues
+
+### 🟡 Medium
+- **Desktop CDP depends on external Chrome**: Must launch Chrome with `--remote-debugging-port=9222`. No embedded browser yet.
+- **Extension AX tree tab-targeting**: Fix applied (`lastFocusedWindow` + HTTP filter) but edge cases possible.
+- **Gemini 2.5 Flash hallucination**: May hallucinate page content not in AX tree. Use Gemini Pro or Claude for complex pages.
+
+### 🟢 Low
+- **Agent loop max 5 steps**: Hard cap may be too low for complex multi-step tasks.
+- **No action confirmation UI**: Agent executes actions without user approval.
+- **Markdown gaps**: No nested lists, no task lists, no syntax highlighting in code blocks.
+- **Cost tracking UI wiring**: Adapters don't consistently send usage metadata in `done` chunks.
+
+---
+
+## 5. What to Build Next (Sprint 16–20)
+
+| Sprint | Priority | Focus | Key Deliverable |
+|--------|----------|-------|----------------|
+| **16** | High | Agent loop hardening | Error recovery, action confirmation UI, step visualization |
+| **17** | High | Tauri WebviewWindow | Embedded browser pane in split layout |
+| **18** | High | CDP auto-attach | Webview ↔ agent without `--remote-debugging-port` |
+| **19** | Medium | Extension v1.0 polish | Chrome Web Store prep, icon, onboarding |
+| **20** | Medium | Local SLM router | WebGPU inference for intent classification |
+
+See `SPRINT_PROMPTS.md` for detailed agent prompts for each sprint.
+
+---
+
+## 6. Key Dependencies
 
 | Package | Version | Purpose |
 |---------|---------|---------|
-| React | 19.2.x | UI framework |
-| Vite | 6.4.x | Build tool |
+| React | 19.x | UI framework |
+| Vite | 6.4 (ext) / 8.0 (desktop) | Build tool |
 | @crxjs/vite-plugin | 2.0.0-beta.32 | Chrome extension HMR |
+| Tauri | 2.11.1 | Native desktop shell |
 | Zustand | 5.0.x | State management |
-| Zod | 3.24.x | Schema validation |
 | Vitest | 3.2.x | Testing |
-| TypeScript | 5.8.x | Type system |
-| pnpm | 9.x | Package manager |
+| TypeScript | 5.8.x | Types |
+| pnpm | 10.x | Package manager |
 
 ---
 
-## 5. Active Bugs & Known Issues
+## 7. Conventions
 
-### 🔴 Critical
-- None currently.
-
-### 🟡 Medium
-- **AX Tree tab-targeting**: Fix applied (`lastFocusedWindow` + HTTP filter) but not yet verified by user in production.
-- **Gemini hallucination on complex pages**: Even with URL injection, Gemini 2.5 Flash may hallucinate content not in the AX tree. Use Gemini Pro or Claude Sonnet for complex pages.
-
-### 🟢 Low
-- **No multi-conversation support**: ~~All messages in single flat array~~ **Fixed in Sprint 10**. Full conversation CRUD with drawer UI.
-- **Markdown renderer gaps**: No nested lists, no task lists (`- [ ]`), no syntax highlighting.
-- **Agent loop max steps**: Hard cap at 5 — may need tuning for complex multi-step tasks.
-
----
-
-## 6. What to Build Next (Priority Order)
-
-### ~~A. Close the Agent Loop~~ ✅ Sprint 8
-### ~~B. Wire Usage Metadata~~ ✅ Sprint 8
-### ~~C. Wire ProviderRouter~~ ✅ Sprint 8
-### ~~D. Markdown Tables/Blockquotes~~ ✅ Sprint 9
-
-### ~~E. Multi-Conversation Support~~ ✅ Sprint 10
-### ~~F. Enhanced Conversation Features~~ ✅ Sprint 11
-
-### ~~G. Tauri Migration Prep~~ ✅ Sprint 12
-- `native-bindings` package implemented (IPC, Storage, CDP)
-- `NativeBrowserController` (CEF websocket wrapper)
-- `NativeIPCProvider` and `NativeStorageProvider` using `@tauri-apps/api`
-
-### ~~H. Tauri Desktop App Scaffold~~ ✅ Sprint 13
-- Created `apps/desktop` Tauri app via Vite + React + TS
-- Integrated workspace packages (`@wave/core`, `@wave/ui-components`, `@wave/native-bindings`)
-- Configured `tauri.conf.json` with correct window dimensions and CSP
-- Registered `tauri-plugin-store` in `lib.rs` and granted capabilities in `default.json`
-
-### ~~I. Native Agent Loop Implementation~~ ✅ Sprint 14
-- Implemented native `BrowserController` logic using CDP via WebSockets to `localhost:9222`
-- Ported `background.ts` logic seamlessly into `App.tsx` natively replacing chrome ports
-- Added native system tray icon and global shortcuts (Cmd+Shift+Space) via Tauri plugins
-
----
-
-## 7. Important Patterns & Conventions
-
-- **Adapter pattern**: All provider logic encapsulated in `StreamAdapter` implementations
-- **Port-based streaming**: Service Worker ↔ Side Panel via `chrome.runtime.connect` (not `sendMessage`)
-- **CSS naming**: BEM-style with `side-panel__` prefix, CSS custom properties for all tokens
-- **File naming**: kebab-case for files, PascalCase for components
-- **No external CSS frameworks**: All vanilla CSS with design tokens in `:root`
-- **Zero-dependency markdown**: Custom parser, not marked.js or similar
-- **Session storage for API keys**: Keys live in `chrome.storage.session` (ephemeral, wiped on browser close)
+- **Shared logic** → `packages/core/src/hooks/` (React hooks) or `packages/core/src/domain/` (plain TS)
+- **Platform-specific** → `ext-bindings/` (Chrome) or `native-bindings/` (Tauri)
+- **CSS** → Vanilla CSS, BEM naming, design tokens in `:root`
+- **Streaming** → Extension: `chrome.runtime.connect` ports; Desktop: direct `adapter.stream()`
+- **State** → Never store in service worker variables (use `chrome.storage`)
+- **API keys** → `chrome.storage.session` (extension) or in-memory Map (desktop). NEVER persisted.
+- **Imports** → Use `.js` extensions in import paths (ESM)
