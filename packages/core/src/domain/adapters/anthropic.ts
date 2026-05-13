@@ -1,18 +1,58 @@
 /**
  * Anthropic streaming adapter.
  * Handles: claude-sonnet-4, claude-haiku-4, claude-3.5-haiku
- * 
+ *
  * SSE format: event-based (message_start, content_block_delta, message_delta, message_stop)
  * Delta: {"type":"content_block_delta","delta":{"type":"text_delta","text":"token"}}
- * 
+ *
  * @see Knowledge Base: Wave 5.2
  */
 
 import type { StreamChunk } from '../../types/stream.js';
 import type { StreamAdapter, StreamRequest } from '../stream-provider.js';
+import {
+  combineTimeoutSignal,
+  defaultStreamTimeoutMs,
+  fetchWith429Retry,
+  formatNetworkError,
+  parseRetryAfterSeconds,
+} from './stream-fetch.js';
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
+
+/** Build JSON body for /v1/messages (exported for tests). */
+export function buildAnthropicBody(request: StreamRequest) {
+  const systemMessage = request.messages.find((m) => m.role === 'system');
+  const chatMessages = request.messages
+    .filter((m) => m.role !== 'system')
+    .map((m) => {
+      if (Array.isArray(m.content)) {
+        return {
+          role: m.role as 'user' | 'assistant',
+          content: m.content.map((c) => {
+            if (c.type === 'text') return { type: 'text', text: c.text };
+            if (c.type === 'image')
+              return {
+                type: 'image',
+                source: { type: 'base64', media_type: c.mimeType || 'image/png', data: c.data },
+              };
+            return c;
+          }),
+        };
+      }
+      return { role: m.role as 'user' | 'assistant', content: m.content as string };
+    });
+
+  return {
+    model: request.model,
+    max_tokens: request.maxTokens ?? 4096,
+    temperature: request.temperature ?? 0.7,
+    stream: true,
+    ...(systemMessage ? { system: systemMessage.content } : {}),
+    messages: chatMessages,
+  };
+}
 
 export class AnthropicAdapter implements StreamAdapter {
   readonly provider = 'anthropic';
@@ -23,47 +63,42 @@ export class AnthropicAdapter implements StreamAdapter {
     onChunk: (chunk: StreamChunk) => void,
     signal?: AbortSignal,
   ): Promise<void> {
-    // Anthropic uses separate system param, not in messages array
-    const systemMessage = request.messages.find((m) => m.role === 'system');
-    const chatMessages = request.messages
-      .filter((m) => m.role !== 'system')
-      .map((m) => {
-        if (Array.isArray(m.content)) {
-          return {
-            role: m.role as 'user' | 'assistant',
-            content: m.content.map(c => {
-              if (c.type === 'text') return { type: 'text', text: c.text };
-              if (c.type === 'image') return { 
-                type: 'image', 
-                source: { type: 'base64', media_type: c.mimeType || 'image/png', data: c.data } 
-              };
-              return c;
-            })
-          };
-        }
-        return { role: m.role as 'user' | 'assistant', content: m.content as string };
-      });
+    const timeoutMs = request.timeoutMs ?? defaultStreamTimeoutMs();
+    const combined = combineTimeoutSignal(signal, timeoutMs);
+    const body = JSON.stringify(buildAnthropicBody(request));
 
-    const response = await fetch(ANTHROPIC_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': ANTHROPIC_VERSION,
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
-      body: JSON.stringify({
-        model: request.model,
-        max_tokens: request.maxTokens ?? 4096,
-        temperature: request.temperature ?? 0.7,
-        stream: true,
-        ...(systemMessage ? { system: systemMessage.content } : {}),
-        messages: chatMessages,
-      }),
-      signal,
-    });
+    let response: Response;
+    try {
+      response = await fetchWith429Retry(
+        ANTHROPIC_API_URL,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': ANTHROPIC_VERSION,
+            'anthropic-dangerous-direct-browser-access': 'true',
+          },
+          body,
+          signal: combined,
+        },
+        (text) => onChunk({ type: 'text_delta', content: text }),
+      );
+    } catch (err) {
+      onChunk({ type: 'error', content: formatNetworkError(err) });
+      return;
+    }
 
     if (!response.ok) {
+      if (response.status === 429) {
+        const sec = parseRetryAfterSeconds(response.headers.get('Retry-After'));
+        await response.text().catch(() => '');
+        onChunk({
+          type: 'error',
+          content: `Rate limited — retry in ${sec}s`,
+        });
+        return;
+      }
       const errorBody = await response.text();
       onChunk({
         type: 'error',
@@ -80,7 +115,7 @@ export class AnthropicAdapter implements StreamAdapter {
 
     const decoder = new TextDecoder();
     let buffer = '';
-    let inputTokens = 0; // Captured from message_start, reported in message_delta
+    let inputTokens = 0;
 
     try {
       while (true) {
@@ -103,8 +138,11 @@ export class AnthropicAdapter implements StreamAdapter {
 
           if (!trimmed.startsWith('data: ')) continue;
 
+          const payload = trimmed.slice(6).trim();
+          if (!payload) continue;
+
           try {
-            const json = JSON.parse(trimmed.slice(6));
+            const json = JSON.parse(payload);
 
             switch (currentEvent || json.type) {
               case 'content_block_delta':
@@ -138,20 +176,18 @@ export class AnthropicAdapter implements StreamAdapter {
                 break;
 
               case 'message_start':
-                // Capture input tokens — reported later in message_delta
                 if (json.message?.usage) {
                   inputTokens = json.message.usage.input_tokens ?? 0;
                 }
                 break;
 
               case 'message_stop':
-                // Final signal
                 break;
             }
 
             currentEvent = '';
           } catch {
-            // Skip malformed JSON
+            /* partial JSON — ignore until next line */
           }
         }
       }

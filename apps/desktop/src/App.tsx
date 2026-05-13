@@ -394,6 +394,11 @@ function App() {
                   content: isStatus ? chunk.content : (typeof current === 'string' ? current + chunk.content : chunk.content),
                 };
               }));
+            } else if (chunk.type === 'error') {
+              const raw = String(chunk.content ?? '');
+              const line = raw.startsWith('Rate limited') ? raw : `Error: ${raw}`;
+              mgr.setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, content: line, isStreaming: false } : m));
+              mgr.setIsStreaming(false);
             } else if (chunk.type === 'done' && chunk.metadata?.usage) {
               costTracker.record({ provider: mgr.activeProvider, model: mgr.activeModel, promptTokens: chunk.metadata.usage.promptTokens ?? 0, completionTokens: chunk.metadata.usage.completionTokens ?? 0, timestamp: Date.now() });
               mgr.refreshCost();
@@ -445,7 +450,9 @@ function App() {
               };
             }));
           } else if (chunk.type === 'error') {
-            mgr.setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, content: `Error: ${chunk.content}`, isStreaming: false } : m));
+            const raw = String(chunk.content ?? '');
+            const line = raw.startsWith('Rate limited') ? raw : `Error: ${raw}`;
+            mgr.setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, content: line, isStreaming: false } : m));
           } else if (chunk.type === 'done' && chunk.metadata?.usage) {
             costTracker.record({ provider: mgr.activeProvider, model: mgr.activeModel, promptTokens: chunk.metadata.usage.promptTokens ?? 0, completionTokens: chunk.metadata.usage.completionTokens ?? 0, timestamp: Date.now() });
             mgr.refreshCost();

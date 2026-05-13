@@ -91,10 +91,12 @@ function useStreamHandler(
         }
 
         if (message.error) {
+          const raw = String(message.error);
+          const line = raw.startsWith('Rate limited') ? raw : `Error: ${raw}`;
           setMessages((prev) =>
             prev.map((m) =>
               m.id === assistantMsgId
-                ? { ...m, content: `Error: ${message.error}`, isStreaming: false }
+                ? { ...m, content: line, isStreaming: false }
                 : m
             )
           );
@@ -124,7 +126,14 @@ function useStreamHandler(
             setMessages((prev) =>
               prev.map((m) =>
                 m.id === assistantMsgId
-                  ? { ...m, content: `Error: ${chunk.content}`, isStreaming: false }
+                  ? {
+                      ...m,
+                      content: (() => {
+                        const raw = String(chunk.content ?? '');
+                        return raw.startsWith('Rate limited') ? raw : `Error: ${raw}`;
+                      })(),
+                      isStreaming: false,
+                    }
                   : m
               )
             );

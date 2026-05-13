@@ -13,6 +13,8 @@ export interface StreamRequest {
   model: string;
   maxTokens?: number;
   temperature?: number;
+  /** Wall-clock cap for the HTTP request + stream read (default 30s). */
+  timeoutMs?: number;
 }
 
 export interface StreamAdapter {

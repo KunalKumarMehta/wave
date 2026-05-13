@@ -94,4 +94,39 @@ describe('ContextBuilder', () => {
     // Prose ratio: ~4 chars/token
     expect(ctx.tokenEstimate).toBeLessThan(10);
   });
+
+  it('screenshot adds image part to query message', () => {
+    const ctx = new ContextBuilder(10000)
+      .system('S')
+      .query('What do you see?')
+      .screenshot('base64imagedata')
+      .build();
+
+    const last = ctx.messages[ctx.messages.length - 1];
+    expect(last.role).toBe('user');
+    expect(Array.isArray(last.content)).toBe(true);
+    const parts = last.content as { type: string; text?: string; data?: string }[];
+    expect(parts[0]).toEqual({ type: 'text', text: 'What do you see?' });
+    expect(parts[1].type).toBe('image');
+    expect(parts[1].data).toBe('base64imagedata');
+  });
+
+  it('reserves 1000 tokens in budget when screenshot set', () => {
+    const ctx = new ContextBuilder(2000)
+      .system('S')
+      .pageContext('x'.repeat(4000), 'https://a.com', 'T')
+      .query('Q')
+      .screenshot('img')
+      .build();
+
+    expect(ctx.tokenEstimate).toBeGreaterThanOrEqual(1000);
+    const queryMsg = ctx.messages.find((m) => m.role === 'user' && Array.isArray(m.content));
+    expect(queryMsg).toBeDefined();
+  });
+
+  it('query stays string when no screenshot', () => {
+    const ctx = new ContextBuilder(10000).system('S').query('Plain').build();
+    const last = ctx.messages[ctx.messages.length - 1];
+    expect(last.content).toBe('Plain');
+  });
 });

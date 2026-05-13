@@ -41,7 +41,12 @@ export function SettingsView({
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [testing, setTesting] = useState(false);
+  const [connectionResult, setConnectionResult] = useState<{ ok: boolean; text: string } | null>(null);
   const [useVisionFallback, setUseVisionFallback] = useState(true);
+
+  useEffect(() => {
+    setConnectionResult(null);
+  }, [activeProvider]);
 
   // Load existing key status and settings on mount
   useEffect(() => {
@@ -97,23 +102,47 @@ export function SettingsView({
     }
 
     setTesting(true);
+    setConnectionResult(null);
+    const ac = new AbortController();
+    const t = window.setTimeout(() => ac.abort(), 10_000);
+
+    let errorText: string | null = null;
+    let gotContent = false;
+
     try {
       const adapter = ADAPTERS[provider];
-      let success = false;
-      await adapter.stream({
-        model: PROVIDER_CATALOG[provider].defaultModel,
-        messages: [{ role: 'user', content: 'hi' }]
-      }, { apiKey: key }, (chunk: any) => {
-        if (chunk.type === 'text_delta') success = true;
-      }, new AbortController().signal);
+      await adapter.stream(
+        {
+          model: PROVIDER_CATALOG[provider].defaultModel,
+          messages: [{ role: 'user', content: 'Hi' }],
+          timeoutMs: 10_000,
+        },
+        key,
+        (chunk: { type: string; content?: string }) => {
+          if (chunk.type === 'error') {
+            errorText = chunk.content ?? 'Unknown error';
+          }
+          if (chunk.type === 'text_delta' || chunk.type === 'done') {
+            gotContent = true;
+          }
+        },
+        ac.signal,
+      );
 
-      if (success) setMessage('Connection successful! ✅');
-      else setMessage('Connection failed ❌');
+      if (errorText) {
+        setConnectionResult({ ok: false, text: `Error: ${errorText}` });
+      } else if (gotContent) {
+        setConnectionResult({ ok: true, text: 'Connection works!' });
+      } else {
+        setConnectionResult({ ok: false, text: 'Error: No response from provider' });
+      }
     } catch (err) {
-      setMessage(`Error: ${err instanceof Error ? err.message : 'Unknown'}`);
+      const msg = err instanceof Error ? err.message : 'Unknown';
+      setConnectionResult({ ok: false, text: `Error: ${msg}` });
+    } finally {
+      window.clearTimeout(t);
+      setTesting(false);
     }
-    setTesting(false);
-    setTimeout(() => setMessage(''), 3000);
   }, [storage]);
 
   const catalog = PROVIDER_CATALOG[activeProvider];
@@ -220,21 +249,32 @@ export function SettingsView({
           </button>
         </div>
         {savedKeys[activeProvider] && (
-          <div className="settings__key-actions">
-            <button
-              className="settings__test-btn"
-              onClick={() => handleTestConnection(activeProvider)}
-              disabled={testing}
-            >
-              {testing ? 'Testing...' : 'Test connection'}
-            </button>
-            <button
-              className="settings__delete-btn"
-              onClick={() => handleDeleteKey(activeProvider)}
-            >
-              Clear key
-            </button>
-          </div>
+          <>
+            <div className="settings__key-actions">
+              <button
+                className="settings__test-btn"
+                onClick={() => handleTestConnection(activeProvider)}
+                disabled={testing}
+              >
+                {testing ? 'Testing...' : 'Test connection'}
+              </button>
+              <button
+                className="settings__delete-btn"
+                onClick={() => handleDeleteKey(activeProvider)}
+              >
+                Clear key
+              </button>
+            </div>
+            {connectionResult && (
+              <div
+                className={`settings__connection-result ${connectionResult.ok ? 'settings__connection-result--ok' : 'settings__connection-result--err'}`}
+                role="status"
+              >
+                {connectionResult.ok ? '✅ ' : '❌ '}
+                {connectionResult.text}
+              </div>
+            )}
+          </>
         )}
       </section>
     </div>
