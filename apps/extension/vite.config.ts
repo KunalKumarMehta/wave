@@ -10,7 +10,14 @@ export default defineConfig({
   ],
   build: {
     outDir: 'dist',
-    emptyDirFirst: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/')) return 'vendor-react';
+          if (id.includes('packages/core/')) return 'core';
+        }
+      }
+    }
   },
   server: {
     port: 5173,

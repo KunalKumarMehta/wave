@@ -1,4 +1,4 @@
-import * as webllm from '@mlc-ai/web-llm';
+import type * as WebLLMTypes from '@mlc-ai/web-llm';
 
 export type Intent = 'chat' | 'page_query' | 'page_action';
 
@@ -18,13 +18,14 @@ Respond ONLY with a JSON object: {"intent": "...", "confidence": 0.0-1.0}
 `;
 
 export class LocalRouter {
-  private engine: webllm.MLCEngine | null = null;
+  private engine: WebLLMTypes.MLCEngine | null = null;
   private isLoaded = false;
   private modelId = 'SmolLM2-360M-Instruct-q4f16_1-MLC';
 
   async init(onProgress?: (p: number) => void) {
     if (this.isLoaded) return;
     
+    const webllm = await import('@mlc-ai/web-llm');
     this.engine = new webllm.MLCEngine();
     this.engine.setInitProgressCallback((report) => {
       if (onProgress) onProgress(report.progress);

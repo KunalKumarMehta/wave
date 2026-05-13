@@ -21,8 +21,6 @@ import { ProviderRouter, type ProviderRoute } from '@wave/core/src/domain/provid
 import { runAgentLoop } from '@wave/core/src/domain/agent-loop.js';
 import { serializeAXTree } from '@wave/core/src/domain/ax-serializer.js';
 
-import './App.css';
-
 // ── Platform Bindings ───────────────────────────────────────────
 
 const ipc = new NativeIPCProvider();
@@ -272,30 +270,30 @@ function App() {
         });
       } else {
         const adapter = adapters[mgr.activeProvider];
-      if (adapter) {
-        try {
-          let generatedTitle = '';
-          await adapter.stream({
-            model: mgr.activeModel,
-            messages: [
-              { role: 'system', content: TITLE_SYSTEM_PROMPT },
-              { role: 'user', content }
-            ]
-          }, { apiKey }, (chunk: any) => {
-            if (chunk.type === 'text_delta') generatedTitle += chunk.content;
-          }, new AbortController().signal);
+        if (adapter) {
+          try {
+            let generatedTitle = '';
+            await adapter.stream({
+              model: mgr.activeModel,
+              messages: [
+                { role: 'system', content: TITLE_SYSTEM_PROMPT },
+                { role: 'user', content }
+              ]
+            }, { apiKey }, (chunk: any) => {
+              if (chunk.type === 'text_delta') generatedTitle += chunk.content;
+            }, new AbortController().signal);
 
-          const finalTitle = generatedTitle.replace(/["']/g, '').trim().slice(0, 60);
-          if (finalTitle) {
-            await convStorage.updateMeta(convId!, { title: finalTitle });
-            await mgr.refreshConvList();
+            const finalTitle = generatedTitle.replace(/["']/g, '').trim().slice(0, 60);
+            if (finalTitle) {
+              await convStorage.updateMeta(convId!, { title: finalTitle });
+              await mgr.refreshConvList();
+            }
+          } catch (e) {
+            console.error("Failed to generate title", e);
           }
-        } catch (e) {
-          console.error("Failed to generate title", e);
         }
       }
     }
-  }
 
     abortControllerRef.current = new AbortController();
 
