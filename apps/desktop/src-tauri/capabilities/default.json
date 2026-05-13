@@ -9,7 +9,12 @@
     "core:default",
     "store:default",
     "global-shortcut:default",
-    "webview:allow-all",
-    "window:allow-all"
+    "core:webview:default",
+    "core:webview:allow-create-webview",
+    "core:webview:allow-set-webview-size",
+    "core:webview:allow-set-webview-position",
+    "core:window:default",
+    "core:window:allow-set-size",
+    "core:window:allow-set-position"
   ]
 }

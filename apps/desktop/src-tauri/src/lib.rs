@@ -1,7 +1,7 @@
 use tauri::Manager;
 use tauri::tray::{TrayIconBuilder, MouseButton};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
-use tauri::webview::WebviewBuilder;
+use tauri::WebviewWindowBuilder;
 
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -10,7 +10,7 @@ fn greet(name: &str) -> String {
 
 #[tauri::command]
 async fn navigate_browser(app: tauri::AppHandle, url: String) -> Result<(), String> {
-    if let Some(webview) = app.get_webview("browser") {
+    if let Some(webview) = app.get_webview_window("browser") {
         let parsed_url = url.parse().map_err(|e| format!("Invalid URL: {}", e))?;
         webview.navigate(parsed_url).map_err(|e| e.to_string())?;
         Ok(())
@@ -21,7 +21,7 @@ async fn navigate_browser(app: tauri::AppHandle, url: String) -> Result<(), Stri
 
 #[tauri::command]
 fn get_browser_url(app: tauri::AppHandle) -> String {
-    if let Some(webview) = app.get_webview("browser") {
+    if let Some(webview) = app.get_webview_window("browser") {
         webview.url().map(|u| u.to_string()).unwrap_or_default()
     } else {
         String::new()
@@ -30,8 +30,9 @@ fn get_browser_url(app: tauri::AppHandle) -> String {
 
 #[tauri::command]
 fn set_browser_bounds(app: tauri::AppHandle, x: i32, y: i32, width: u32, height: u32) {
-    if let Some(webview) = app.get_webview("browser") {
-        let _ = webview.set_bounds(tauri::Rect { x, y, width, height });
+    if let Some(webview) = app.get_webview_window("browser") {
+        let _ = webview.set_position(tauri::Position::Logical(tauri::LogicalPosition { x: x as f64, y: y as f64 }));
+        let _ = webview.set_size(tauri::Size::Logical(tauri::LogicalSize { width: width as f64, height: height as f64 }));
     }
 }
 
@@ -65,8 +66,11 @@ pub fn run() {
       // Create browser webview attached to main window
       let main_window = app.get_webview_window("main").unwrap();
       
-      let _browser = WebviewBuilder::new("browser", tauri::WebviewUrl::App("about:blank".parse().unwrap()))
-        .build(&main_window)?;
+      let _browser = WebviewWindowBuilder::new(app, "browser", tauri::WebviewUrl::External("about:blank".parse().unwrap()))
+        .parent(&main_window)?
+        .position(0.0, 48.0)
+        .inner_size(800.0, 600.0)
+        .build()?;
 
       // Add tray icon
       let _tray = TrayIconBuilder::new()
