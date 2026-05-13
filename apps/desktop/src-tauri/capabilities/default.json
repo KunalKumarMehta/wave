@@ -8,6 +8,8 @@
   "permissions": [
     "core:default",
     "store:default",
-    "global-shortcut:default"
+    "global-shortcut:default",
+    "webview:allow-all",
+    "window:allow-all"
   ]
 }

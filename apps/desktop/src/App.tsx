@@ -1,10 +1,13 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useEffect, useState } from 'react';
+import './App.css';
 import { PlatformProvider, SidePanel, SettingsView } from '@wave/ui-components';
 import { InputBar } from '@wave/ui-components/src/chat/InputBar.js';
 import { MessageList } from '@wave/ui-components/src/chat/MessageList.js';
 import { ConversationDrawer } from '@wave/ui-components/src/layout/ConversationDrawer.js';
 import { ActionConfirmation } from '@wave/ui-components/src/chat/ActionConfirmation.js';
+import { NavBar } from '@wave/ui-components/src/layout/NavBar.js';
 import { NativeIPCProvider, NativeStorageProvider, NativeBrowserController } from '@wave/native-bindings';
+import { invoke } from '@tauri-apps/api/core';
 import { useConversationManager, generateId, isPageQuery, CHAT_SYSTEM_PROMPT, TITLE_SYSTEM_PROMPT } from '@wave/core';
 import type { Message } from '@wave/core';
 import { costTracker } from '@wave/core/src/domain/cost-tracker.js';
@@ -153,7 +156,58 @@ function App() {
   });
 
   const abortControllerRef = useRef<AbortController | null>(null);
-  const [confirmAction, setConfirmAction] = React.useState<{ action: string; params: any; resolve: (val: boolean) => void } | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{ action: string; params: any; resolve: (val: boolean) => void } | null>(null);
+  const browserPaneRef = useRef<HTMLDivElement>(null);
+
+  // Sync native browser webview bounds with DOM container
+  useEffect(() => {
+    if (!browserPaneRef.current) return;
+
+    const updateBounds = () => {
+      if (!browserPaneRef.current) return;
+      const rect = browserPaneRef.current.getBoundingClientRect();
+      const navHeight = 48; // NavBar height
+      invoke('set_browser_bounds', {
+        x: Math.round(rect.x),
+        y: Math.round(rect.y + navHeight),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height - navHeight),
+      });
+    };
+
+    const observer = new ResizeObserver(updateBounds);
+    observer.observe(browserPaneRef.current);
+    
+    // Initial update
+    updateBounds();
+
+    return () => observer.disconnect();
+  }, []);
+
+  const [sidebarWidth, setSidebarWidth] = useState(400);
+  const isResizingRef = useRef(false);
+
+  const startResizing = useCallback(() => {
+    isResizingRef.current = true;
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', stopResizing);
+    document.body.style.cursor = 'col-resize';
+  }, []);
+
+  const stopResizing = useCallback(() => {
+    isResizingRef.current = false;
+    document.removeEventListener('mousemove', handleMouseMove);
+    document.removeEventListener('mouseup', stopResizing);
+    document.body.style.cursor = 'default';
+  }, []);
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!isResizingRef.current) return;
+    const newWidth = window.innerWidth - e.clientX;
+    if (newWidth > 320 && newWidth < window.innerWidth * 0.6) {
+      setSidebarWidth(newWidth);
+    }
+  }, []);
 
   const handleSend = useCallback(async (content: string) => {
     const apiKey = await storage.secure.getSecret(`apikey_${mgr.activeProvider}`);
@@ -294,54 +348,70 @@ function App() {
 
   return (
     <PlatformProvider ipc={ipc} storage={storage} ui={ui}>
-      <ConversationDrawer
-        conversations={mgr.convList}
-        activeConversationId={mgr.activeConvId}
-        isOpen={mgr.drawerOpen}
-        onClose={() => mgr.setDrawerOpen(false)}
-        onSelect={mgr.handleSelectConversation}
-        onDelete={mgr.handleDeleteConversation}
-        onTogglePin={mgr.handleTogglePin}
-        onNewChat={mgr.handleNewChat}
-        onExportAll={mgr.handleExportAll}
-        onImportAll={mgr.handleImportAll}
-      />
-      <SidePanel
-        onSettingsClick={() => mgr.setSettingsOpen(!mgr.settingsOpen)}
-        onNewChat={mgr.handleNewChat}
-        onHistoryClick={() => mgr.setDrawerOpen(true)}
-        activeProvider={mgr.activeProvider}
-        activeModel={mgr.activeModel}
-        totalCost={mgr.totalCost}
-        totalTokens={mgr.totalTokens}
-      >
-        {mgr.settingsOpen ? (
-          <SettingsView
+      <div className="split-pane">
+        <div ref={browserPaneRef} className="browser-pane">
+          <NavBar />
+          {/* Native webview will be rendered over this area by Tauri */}
+          <div className="browser-placeholder">
+            <div className="browser-placeholder__msg">
+              Browser Webview Active
+            </div>
+          </div>
+        </div>
+
+        <div className="resizer" onMouseDown={startResizing} />
+
+        <div className="chat-sidebar-wrapper" style={{ width: sidebarWidth, flex: 'none' }}>
+          <ConversationDrawer
+            conversations={mgr.convList}
+            activeConversationId={mgr.activeConvId}
+            isOpen={mgr.drawerOpen}
+            onClose={() => mgr.setDrawerOpen(false)}
+            onSelect={mgr.handleSelectConversation}
+            onDelete={mgr.handleDeleteConversation}
+            onTogglePin={mgr.handleTogglePin}
+            onNewChat={mgr.handleNewChat}
+            onExportAll={mgr.handleExportAll}
+            onImportAll={mgr.handleImportAll}
+          />
+          <SidePanel
+            onSettingsClick={() => mgr.setSettingsOpen(!mgr.settingsOpen)}
+            onNewChat={mgr.handleNewChat}
+            onHistoryClick={() => mgr.setDrawerOpen(true)}
             activeProvider={mgr.activeProvider}
             activeModel={mgr.activeModel}
-            onProviderChange={mgr.handleProviderChange}
-            onModelChange={mgr.handleModelChange}
-            onClose={() => mgr.setSettingsOpen(false)}
-          />
-        ) : (
-          <MessageList messages={mgr.messages} />
-        )}
-      </SidePanel>
-      {confirmAction && (
-        <ActionConfirmation 
-          action={confirmAction.action}
-          params={confirmAction.params}
-          onAllow={() => { confirmAction.resolve(true); setConfirmAction(null); }}
-          onDeny={() => { confirmAction.resolve(false); setConfirmAction(null); }}
-        />
-      )}
-      {!mgr.settingsOpen && (
-        <InputBar
-          onSend={handleSend}
-          disabled={mgr.isStreaming}
-          placeholder={mgr.isStreaming ? 'Wave is thinking...' : undefined}
-        />
-      )}
+            totalCost={mgr.totalCost}
+            totalTokens={mgr.totalTokens}
+          >
+            {mgr.settingsOpen ? (
+              <SettingsView
+                activeProvider={mgr.activeProvider}
+                activeModel={mgr.activeModel}
+                onProviderChange={mgr.handleProviderChange}
+                onModelChange={mgr.handleModelChange}
+                onClose={() => mgr.setSettingsOpen(false)}
+              />
+            ) : (
+              <MessageList messages={mgr.messages} />
+            )}
+          </SidePanel>
+          {confirmAction && (
+            <ActionConfirmation 
+              action={confirmAction.action}
+              params={confirmAction.params}
+              onAllow={() => { confirmAction.resolve(true); setConfirmAction(null); }}
+              onDeny={() => { confirmAction.resolve(false); setConfirmAction(null); }}
+            />
+          )}
+          {!mgr.settingsOpen && (
+            <InputBar
+              onSend={handleSend}
+              disabled={mgr.isStreaming}
+              placeholder={mgr.isStreaming ? 'Wave is thinking...' : undefined}
+            />
+          )}
+        </div>
+      </div>
     </PlatformProvider>
   );
 }

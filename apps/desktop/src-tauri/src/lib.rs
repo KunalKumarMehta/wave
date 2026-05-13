@@ -1,10 +1,38 @@
 use tauri::Manager;
 use tauri::tray::{TrayIconBuilder, MouseButton};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+use tauri::webview::WebviewBuilder;
 
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You are in the desktop app.", name)
+}
+
+#[tauri::command]
+async fn navigate_browser(app: tauri::AppHandle, url: String) -> Result<(), String> {
+    if let Some(webview) = app.get_webview("browser") {
+        let parsed_url = url.parse().map_err(|e| format!("Invalid URL: {}", e))?;
+        webview.navigate(parsed_url).map_err(|e| e.to_string())?;
+        Ok(())
+    } else {
+        Err("Browser webview not found".into())
+    }
+}
+
+#[tauri::command]
+fn get_browser_url(app: tauri::AppHandle) -> String {
+    if let Some(webview) = app.get_webview("browser") {
+        webview.url().map(|u| u.to_string()).unwrap_or_default()
+    } else {
+        String::new()
+    }
+}
+
+#[tauri::command]
+fn set_browser_bounds(app: tauri::AppHandle, x: i32, y: i32, width: u32, height: u32) {
+    if let Some(webview) = app.get_webview("browser") {
+        let _ = webview.set_bounds(tauri::Rect { x, y, width, height });
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -24,7 +52,7 @@ pub fn run() {
             }
         }
     }).build())
-    .invoke_handler(tauri::generate_handler![greet])
+    .invoke_handler(tauri::generate_handler![greet, navigate_browser, get_browser_url, set_browser_bounds])
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
@@ -33,6 +61,12 @@ pub fn run() {
             .build(),
         )?;
       }
+
+      // Create browser webview attached to main window
+      let main_window = app.get_webview_window("main").unwrap();
+      
+      let _browser = WebviewBuilder::new("browser", tauri::WebviewUrl::App("about:blank".parse().unwrap()))
+        .build(&main_window)?;
 
       // Add tray icon
       let _tray = TrayIconBuilder::new()

@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@tauri-apps/api": "^2.11.0",
     "@wave/core": "workspace:*",
     "@wave/native-bindings": "workspace:*",
     "@wave/ui-components": "workspace:*",

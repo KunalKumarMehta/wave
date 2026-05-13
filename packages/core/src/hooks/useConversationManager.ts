@@ -7,7 +7,7 @@
  * @see HANDOFF.md — Sprint 15 (shared hooks refactor)
  */
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import type { Message } from '../types/message.js';
 import { costTracker } from '../domain/cost-tracker.js';
 import type { ConversationStorageAPI, ConversationSummary } from '../domain/conversation-storage.js';
