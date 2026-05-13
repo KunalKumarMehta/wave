@@ -137,3 +137,54 @@ All notable changes to Wave are documented here.
 - Project course audit with PRD alignment check
 - PRD v0.4, SAD v0.3, HANDOFF v3, .context v2
 - `SPRINT_PROMPTS.md` — detailed prompts for Sprint 16–20
+
+## [0.6.0] — 2026-05-13
+
+### Added
+
+#### Agent Loop Hardening (Sprint 16)
+- Error recovery per action: try/catch with error fed back to LLM
+- `onActionConfirm` callback: pauses loop for user Allow/Deny before executing
+- `onError` callback for action failure reporting
+- Navigation wait: 2000ms post-navigate + `navigating` status
+- `ActionConfirmation` component with Allow/Deny buttons
+- `AgentStepIndicator` component for step visualization in chat
+- MarkdownRenderer: AGENT_STEP comment parsing for embedded step indicators
+- 8 new tests in `agent-loop.test.ts` (62 total)
+
+#### Embedded Browser (Sprint 17)
+- Split-pane layout: browser pane (70%) + chat sidebar (30%)
+- `NavBar` component: URL input, Back/Forward/Refresh buttons
+- Resizable divider with drag handler (min 320px, max 60%)
+- Tauri Rust commands: `navigate_browser`, `get_browser_url`, `set_browser_bounds`
+- `WebviewWindowBuilder` with parent binding to main window
+- Window resized to 1280x800 for split-pane layout
+
+#### CDP Auto-Attach (Sprint 18)
+- `dom-extractor.ts`: 142 LOC JS injection script for webview DOM extraction
+- `extractPageContextFromWebview()`: runs script via `eval_browser` IPC
+- `executeActionInWebview()`: click/type/scroll/navigate via injected JS
+- Cross-platform message bridge: `window.ipc`, `webkit.messageHandlers`, `chrome.webview`
+- Fallback: WebSocket CDP still available for external Chrome
+- `PageContext` type moved to `abstractions/cdp.ts`
+
+#### Extension v1.0 Polish (Sprint 19)
+- Branded icons: 16/32/48/128px PNG in manifest
+- `OnboardingView`: 3-step flow (Welcome → Provider → API Key) with animated slides
+- Keyboard shortcut: `Cmd+Shift+W` / `Ctrl+Shift+W` to open Side Panel
+- `SettingsView` enhancements: key status indicators, model info, clear/test buttons
+- `ErrorBoundary`: React error boundary with reload button
+- Meta tags updated in `sidepanel.html`
+
+#### Local SLM Router (Sprint 20)
+- `LocalRouter` class: WebLLM integration with SmolLM2-360M-Instruct
+- Intent classification: `chat` / `page_query` / `page_action` with confidence scores
+- Keyword fallback when WebGPU unavailable or model not loaded
+- `generateTitle()` for local auto-titling (saves cloud tokens)
+- `ModelLoader` component: progress bar with skip button
+- Desktop: uses local router for intent classification + auto-titling
+- Extension: uses local router with background loading
+
+### Known Issues
+- 🔴 WebLLM bloats extension bundle to 6.2MB (2.2MB gzip) — needs code splitting
+- Extension icons are identical 326KB files (not properly resized)

@@ -1,7 +1,7 @@
 # PRD: Wave — AI-Native Browser
 
-> **Version:** 0.4 (Updated 2026-05-13)  
-> **Status:** Sprint 15 complete — shared hooks refactor, dual-platform
+> **Version:** 0.5 (Updated 2026-05-13)  
+> **Status:** Sprint 20 complete — full feature MVP, dual-platform
 
 ---
 
@@ -11,87 +11,56 @@ Build an AI-native browser where artificial intelligence is the core interaction
 
 ### Phased Approach
 1. **Phase 1 ✅ (Sprint 1–7):** Chrome Extension MVP — streaming chat, page awareness, cost tracking
-2. **Phase 2 ✅ (Sprint 8–15):** Agent loop, multi-conversation, Tauri desktop, shared hooks
-3. **Phase 3 (Sprint 16–20):** Embedded browser, agent hardening, local LLM, v1.0 polish
+2. **Phase 2 ✅ (Sprint 8–20):** Agent loop, multi-conversation, Tauri desktop, embedded browser, local LLM
+3. **Phase 3 (Sprint 21+):** Performance, vision model, multi-tab, CI/CD, public release
 
 ---
 
 ## 2. Core Objectives
 
-| Objective | Target | Status |
-|-----------|--------|--------|
-| Multi-provider streaming | OpenAI, Anthropic, Gemini | ✅ Sprint 2 |
-| Page awareness via AX tree | Extract + serialize page structure | ✅ Sprint 4 |
-| Agent actions via CDP | Click, type, scroll, navigate | ✅ Sprint 5 |
-| Multi-step agent loop | Observe → Act → Re-observe (5 steps) | ✅ Sprint 8 |
-| Provider failover | Auto-retry on 429/5xx | ✅ Sprint 8 |
-| Multi-conversation | CRUD, drawer, search, pin, export | ✅ Sprint 10-11 |
-| Tauri desktop scaffold | Native app + system tray + shortcuts | ✅ Sprint 12-14 |
-| Shared hook architecture | useConversationManager across platforms | ✅ Sprint 15 |
-| Agent loop hardening | Error recovery, confirmation UI | 🔲 Sprint 16 |
-| Embedded browser view | WebviewWindow in Tauri | 🔲 Sprint 17 |
-| CDP auto-attach | Webview extraction without debug port | 🔲 Sprint 18 |
-| Extension v1.0 | Icons, onboarding, shortcuts | 🔲 Sprint 19 |
-| Local LLM router | WebGPU intent classification | 🔲 Sprint 20 |
+| Objective | Status |
+|-----------|--------|
+| Multi-provider streaming (OpenAI, Anthropic, Gemini) | ✅ Sprint 2 |
+| Page awareness via AX tree | ✅ Sprint 4 |
+| Agent actions via CDP (click, type, scroll, navigate) | ✅ Sprint 5 |
+| Multi-step agent loop (observe→act→re-observe) | ✅ Sprint 8 |
+| Provider failover (auto-retry 429/5xx) | ✅ Sprint 8 |
+| Multi-conversation (CRUD, drawer, search, pin, export) | ✅ Sprint 10-11 |
+| Tauri desktop scaffold + system tray + shortcuts | ✅ Sprint 12-14 |
+| Shared hook architecture | ✅ Sprint 15 |
+| Agent loop hardening (error recovery, confirmation UI) | ✅ Sprint 16 |
+| Embedded browser (WebviewWindow split-pane) | ✅ Sprint 17 |
+| CDP auto-attach (webview DOM extraction) | ✅ Sprint 18 |
+| Extension v1.0 (icons, onboarding, shortcuts, error boundary) | ✅ Sprint 19 |
+| Local LLM router (WebGPU intent classification) | ✅ Sprint 20 |
+| Bundle optimization (code-split WebLLM) | 🔲 Sprint 21 |
+| Desktop integration testing | 🔲 Sprint 22 |
+| Screenshot + vision model fallback | 🔲 Sprint 23 |
+| Multi-tab orchestration | 🔲 Sprint 24 |
+| CI/CD pipeline | 🔲 Sprint 25 |
 
 ---
 
 ## 3. Product Features
 
-### 3.1. AI Chat Assistant ✅
-- Real-time streaming from 3 cloud providers (OpenAI, Anthropic, Gemini)
-- Markdown: code blocks (copy), headings, lists, tables, blockquotes, HR
-- Multi-conversation with CRUD, drawer, search, pinning, export/import
-- LLM-generated conversation titles
-- Cost badge (tokens + USD) in header
+### Implemented ✅
 
-### 3.2. Page Awareness ✅
-- Keyword-based page query detection
-- CDP AX tree extraction with ~93% token reduction
-- Priority-based context builder (8192 token budget)
-- URL + title injection to prevent hallucination
+- **Chat**: 3 cloud providers, streaming, markdown (tables/code/lists/blockquotes)
+- **Page Awareness**: AX tree + DOM extraction, token-budgeted context
+- **Agent Loop**: Multi-step state machine, error recovery, action confirmation UI
+- **Conversations**: CRUD, drawer, search, pin, export/import, LLM auto-titling
+- **Desktop**: Split-pane (browser + chat), NavBar, resizable, WebviewWindow
+- **Extension**: Icons, onboarding, keyboard shortcuts, error boundary
+- **Local SLM**: WebGPU intent classification, local auto-titling
+- **Cost Tracking**: Per-model pricing, session budget
+- **Provider Failover**: Auto-retry on rate limits, chain routing
 
-### 3.3. Agent Loop ✅ (Multi-Step)
-- Observe → Think → Act → Re-observe (max 5 steps)
-- Tool call parser: JSON blocks + inline ACTION: fallback
-- Actions: click, type, scroll, navigate, done
-- Status indicators: 🔍 Reading, 🧠 Analyzing, ⚡ Executing
+### Planned 🔲
 
-### 3.4. Dual Platform ✅
-- **Chrome Extension**: Side Panel with port-based streaming
-- **Tauri Desktop**: Native app with system tray + Cmd+Shift+Space shortcut
-- **Shared hooks**: `useConversationManager` + `chat-utils` in `@wave/core`
-
-### 3.5. Settings & Cost ✅
-- Provider grid with 12 models
-- Ephemeral API key storage (session/memory only)
-- Per-model cost tracking with budget enforcement
-- Provider auto-failover on rate limits
-
-### 3.6. Agent Hardening 🔲 (Sprint 16)
-- Error recovery per action step
-- Action confirmation UI (Allow/Deny)
-- Step visualization with action summaries
-- Navigation wait with page load detection
-
-### 3.7. Embedded Browser 🔲 (Sprint 17-18)
-- Split-pane layout: browser (70%) + chat sidebar (30%)
-- Tauri WebviewWindow for managed browser
-- DOM extraction via webview.eval() (no CDP required)
-- Navigation bar with URL input
-
-### 3.8. Extension v1.0 🔲 (Sprint 19)
-- Branded icons (16/32/48/128px)
-- 3-step onboarding flow
-- Keyboard shortcuts (Cmd+Shift+W)
-- API key status indicators
-- Error boundary
-
-### 3.9. Local LLM Router 🔲 (Sprint 20)
-- WebGPU inference (SmolLM2-360M or Phi-3-mini)
-- Intent classification: chat / page_query / page_action
-- Offline auto-titling
-- Graceful fallback to keyword matching
+- **Performance**: Code-split WebLLM (6MB → lazy loaded)
+- **Vision Model**: Screenshot fallback for canvas/complex pages
+- **Multi-Tab**: Open, switch, close tabs from agent
+- **CI/CD**: GitHub Actions for test, build, release
 
 ---
 
@@ -102,7 +71,7 @@ Build an AI-native browser where artificial intelligence is the core interaction
 | **Extension** | Chrome 116+ (Side Panel API), MV3 |
 | **Desktop** | macOS 12+, Windows 10+ (Tauri v2) |
 | **Security** | API keys ephemeral only. No disk persistence. |
-| **Performance** | Extension < 250KB gzip. Desktop < 5MB installed. |
+| **Performance** | Extension < 300KB gzip (after Sprint 21). Desktop < 500KB. |
 | **Privacy** | Zero telemetry. All data local. |
 
 ---
@@ -113,8 +82,8 @@ Build an AI-native browser where artificial intelligence is the core interaction
 |--------|--------|---------|
 | Time to first token | < 500ms | ~800ms (Gemini) |
 | AX tree extraction | < 200ms | ~150ms |
-| Extension CSS bundle | < 20KB | 20.2KB |
-| Tests | > 60 | 54 (5 suites) |
+| Extension bundle | < 300KB gzip | 🔴 2.2MB (needs Sprint 21) |
+| Tests | > 60 | 62 (6 suites) |
 | Providers | 3+ | 3 |
 | Platforms | 2 | 2 (Extension + Desktop) |
-| Source LOC | — | 7,526 |
+| Source LOC | — | 9,383 |

@@ -1,4 +1,4 @@
-# Wave — Sprint Prompts for Next Sessions
+# Wave — Sprint Prompts (Batch 2: Sprint 21–25)
 
 > Copy-paste the relevant sprint prompt into a new session to continue work.  
 > Each prompt is self-contained — the agent should read HANDOFF.md first, then execute.
@@ -13,325 +13,346 @@
 
 ---
 
-## Sprint 16 — Agent Loop Hardening
+## Sprint 21 — Performance: Code-Split WebLLM + Fix Bundle Bloat
 
 ```
-## Task: Sprint 16 — Agent Loop Hardening
+## Task: Sprint 21 — Fix Bundle Size (CRITICAL)
 
-Read HANDOFF.md, LEARNINGS.md, and AGENTS.md first. Then execute these changes:
+Read HANDOFF.md first. Check current bundle sizes:
+  pnpm --filter @wave/extension build
+  cd apps/desktop && npx vite build
 
-### Context
-The agent loop (`packages/core/src/domain/agent-loop.ts`, 188 LOC) works but has gaps:
-- No error recovery if a single action fails mid-loop
-- No user confirmation before executing actions
-- Step history shown as plain `---` separators
-- No timeout for `navigate()` (should wait for page load)
+### Problem
+The `@mlc-ai/web-llm` dependency (~6MB) is statically imported in:
+- `packages/core/src/domain/local-router.ts` (line 1: `import * as webllm from '@mlc-ai/web-llm'`)
+Both extension (6.2MB) and desktop (6.3MB) bundles are bloated.
+Target: Extension < 300KB gzipped, Desktop < 500KB gzipped (excluding lazy-loaded model).
 
 ### Deliverables
 
-#### 1. Error Recovery in Agent Loop
-In `agent-loop.ts`, wrap the `onAction()` call in try/catch:
-- If action fails, add error context to the loop history
-- Let the LLM decide whether to retry or abort
-- Don't crash the whole loop for one failed action
-- Add an `onError` callback to `AgentLoopConfig`
+#### 1. Dynamic Import WebLLM
+In `packages/core/src/domain/local-router.ts`:
+- Replace `import * as webllm from '@mlc-ai/web-llm'` with dynamic `import()`
+- Load WebLLM only when `init()` is called (not at module level)
+- Pattern:
+  ```ts
+  async init(onProgress?: (p: number) => void) {
+    const webllm = await import('@mlc-ai/web-llm');
+    this.engine = new webllm.MLCEngine();
+    // ...
+  }
+  ```
 
-#### 2. Action Confirmation UI
-In `packages/ui-components/src/chat/ActionConfirmation.tsx`:
-- Create a component that shows "Wave wants to: click 'Submit button'"
-- Two buttons: ✅ Allow / ❌ Deny
-- Add `onActionConfirm` callback to `AgentLoopConfig`
-- If callback provided, pause before executing and wait for user response
-- If callback not provided, auto-execute (backward compatible)
+#### 2. Code-Split Extension Bundle
+In `apps/extension/vite.config.ts`:
+- Add `rollupOptions.output.manualChunks` to split:
+  - `vendor-webllm`: `@mlc-ai/web-llm` (lazy loaded)
+  - `vendor-react`: `react`, `react-dom`
+  - `core`: `@wave/core`
+- Or simply ensure the dynamic import creates a separate chunk automatically
 
-#### 3. Step Visualization
-Replace the `---` separator between agent steps with a styled component:
-- Show action type + target (e.g., "Clicked: Submit button [ref=e5]")
-- Show step number (Step 1/5, Step 2/5...)
-- Use a compact, visually distinct format (not a full chat bubble)
-- Create `AgentStepIndicator.tsx` in `packages/ui-components/src/chat/`
-- Style with `AgentStepIndicator.css`
+#### 3. Code-Split Desktop Bundle
+In `apps/desktop/vite.config.ts`:
+- Same chunking strategy as extension
 
-#### 4. Navigation Wait
-In `agent-loop.ts`, after `navigate()` action:
-- Increase the sleep from 500ms to 2000ms
-- Add a status update: "⏳ Waiting for page to load..."
-- In the CDP handler (both `background.ts` and `App.tsx`):
-  After `Page.navigate`, call `Page.loadEventFired` with a 5s timeout
+#### 4. Fix Other Bundle Issues
+- Remove `import './App.css'` duplicate (App.tsx line 24 — already imported on line 2)
+- Remove unused `offscreen` permission from `apps/extension/manifest.json`
+- Fix indentation in `apps/desktop/src/App.tsx` L274-297 (title generation block)
 
-#### 5. Tests
-Add tests in `packages/core/tests/agent-loop.test.ts`:
-- Mock adapter, onAction, getPageContext
-- Test: loop stops on done()
-- Test: loop respects maxSteps
-- Test: error in action doesn't crash loop
-- Test: isTerminalAction for done/navigate
-- Aim for 8+ tests
+#### 5. Verify Final Sizes
+After changes:
+- `pnpm --filter @wave/extension build` — main chunk should be < 300KB gzipped
+- `cd apps/desktop && npx vite build` — main chunk should be < 500KB gzipped
+- WebLLM chunk should be separate and loaded only on demand
 
 ### Success Criteria
-- `pnpm --filter @wave/extension build` — clean
-- `cd apps/desktop && npx vite build` — clean
-- `cd packages/core && npx vitest run` — all passing (54 existing + new)
-- Commit with message: `feat(sprint-16): agent loop hardening — error recovery, confirmation UI, step viz`
+- Extension main JS < 300KB gzipped (not 2.2MB!)
+- Desktop main JS < 500KB gzipped (not 2.2MB!)
+- WebLLM loads lazily — no impact on initial page load
+- All 62 tests still pass
+- Both builds clean (no warnings except chunk size for lazy WebLLM chunk)
+- Commit: `perf(sprint-21): code-split WebLLM — extension back to <300KB`
 ```
 
 ---
 
-## Sprint 17 — Tauri Embedded Browser (WebviewWindow)
+## Sprint 22 — Desktop Integration Testing
 
 ```
-## Task: Sprint 17 — Embedded Browser View in Tauri Desktop App
-
-Read HANDOFF.md, LEARNINGS.md, and the Tauri v2 skill (`.agents/skills/tauri-v2/SKILL.md`) first.
-
-### Context
-The Tauri desktop app (`apps/desktop`) is currently a chat-only sidebar (420x700px).
-It connects to external Chrome via WebSocket CDP on port 9222.
-The goal is to add an embedded browser view inside the Tauri window itself.
-
-### Architecture
-Use Tauri's WebviewWindow API to create a split-pane layout:
-- LEFT: Browser view (managed Tauri webview, ~70% width)
-- RIGHT: Chat sidebar (existing Wave UI, ~30% width)
-
-### Deliverables
-
-#### 1. Window Layout
-In `apps/desktop/src-tauri/src/lib.rs`:
-- Change main window to fullscreen-capable, larger default (1280x800)
-- Create a second webview/webview-window for the browser pane
-- Use Tauri v2 `WebviewWindowBuilder` to create the browser pane
-- The browser pane loads a user-configurable URL (default: about:blank)
-
-#### 2. Navigation Bar Component
-Create `packages/ui-components/src/layout/NavBar.tsx`:
-- URL input field with Enter-to-navigate
-- Back / Forward / Refresh buttons
-- Current URL display (synced from webview)
-- Emit navigation events via IPC or callback
-
-#### 3. Split Pane Layout
-In `apps/desktop/src/App.tsx`:
-- Restructure layout: `<div class="split-pane"><BrowserPane /><ChatSidebar /></div>`
-- Browser pane takes 70% width, chat sidebar 30%
-- Resizable divider between them
-- Chat sidebar uses the existing SidePanel component
-
-#### 4. Tauri Configuration
-In `apps/desktop/src-tauri/tauri.conf.json`:
-- Update CSP to allow loading external URLs in the browser webview
-- Update window dimensions for split-pane layout
-- Add necessary permissions in `capabilities/default.json`
-
-#### 5. IPC Bridge
-Create a Tauri command to get the current URL of the browser webview:
-- `#[tauri::command] fn get_browser_url()`
-- `#[tauri::command] fn navigate_browser(url: String)`
-- Wire these into the frontend via `@tauri-apps/api/core` invoke()
-
-### Important Notes
-- Read the Tauri v2 skill FIRST — it has the exact API patterns
-- WebviewWindow in Tauri v2 uses `WebviewWindowBuilder::new()`
-- CSP for the browser webview must be permissive (it loads arbitrary sites)
-- The chat sidebar CSP stays restrictive (only API endpoints)
-- Do NOT use iframe — use Tauri's native webview management
-
-### Success Criteria
-- `cd apps/desktop && pnpm tauri dev` — shows split-pane with browser + chat
-- Typing a URL in NavBar navigates the browser pane
-- Chat sidebar still works (streaming, conversations, settings)
-- Commit with message: `feat(sprint-17): embedded browser view — split-pane layout with WebviewWindow`
-```
-
----
-
-## Sprint 18 — CDP Auto-Attach to Managed Webview
-
-```
-## Task: Sprint 18 — CDP Auto-Attach to Managed Webview
+## Task: Sprint 22 — Desktop Browser + Agent Integration Testing
 
 Read HANDOFF.md and AGENTS.md first.
 
 ### Context
-After Sprint 17, the desktop app has a split-pane with an embedded browser webview.
-Currently, page awareness (AX tree extraction) requires Chrome running with `--remote-debugging-port=9222`.
-The goal is to auto-attach CDP to the managed Tauri webview instead.
-
-### Approach
-Tauri's webview is backed by WKWebView (macOS) or WebView2 (Windows).
-Neither natively supports CDP. Two options:
-
-**Option A (Recommended): Use Tauri's webview eval + DOM access**
-- Use `webview.eval()` to run JavaScript in the browser pane
-- Extract a simplified DOM structure via `document.querySelectorAll()`
-- Build an accessibility-like tree from DOM roles, aria labels, and element types
-- This bypasses CDP entirely — no debug port needed
-
-**Option B: Launch Chromium subprocess with CDP**
-- Bundle a headless Chromium and connect via WebSocket
-- Heavy dependency, large binary size
-- Only if Option A proves insufficient
+The desktop app has a split-pane layout with an embedded Tauri WebviewWindow.
+The DOM extractor (`dom-extractor.ts`) injects JS via `eval_browser` and reads
+results via `browser-ipc` events. This pipeline has NEVER been tested end-to-end.
 
 ### Deliverables
 
-#### 1. DOM Extraction Script
-Create `packages/native-bindings/src/dom-extractor.ts`:
-- Generate a JavaScript snippet that extracts interactive elements from the page
-- Capture: tag, role, aria-label, text content, bounding box, input values
-- Return as JSON string via `webview.eval()`
-- Map to the same format as `serializeAXTree()` output
+#### 1. Integration Test Framework
+Set up Tauri's test driver:
+- Add `@tauri-apps/driver` or use Tauri's built-in test mode
+- Create `apps/desktop/tests/` directory
+- Configure test runner in `apps/desktop/package.json`
 
-#### 2. Native Page Context
-Update `packages/native-bindings/src/cdp.ts`:
-- Add `extractPageContextFromWebview(webview)` method
-- Uses `webview.eval()` to run the DOM extraction script
-- Returns `PageContext` compatible with `agent-loop.ts`
-- Falls back to WebSocket CDP if webview extraction fails
+#### 2. Test: DOM Extraction
+Create `apps/desktop/tests/dom-extraction.test.ts`:
+- Load a known HTML page in the browser webview
+- Run `extractPageContextFromWebview('browser')`
+- Verify returned elements match expected DOM structure
+- Test with: buttons, links, inputs, headings
 
-#### 3. Wire into Agent Loop
-Update `apps/desktop/src/App.tsx`:
-- `getPageContext()` uses the webview extraction instead of WebSocket CDP
-- No more requirement for `--remote-debugging-port=9222`
-- Agent loop works seamlessly with the embedded browser
+#### 3. Test: Agent Actions via Webview
+Create `apps/desktop/tests/agent-actions.test.ts`:
+- Navigate browser to a test page with a form
+- Execute `click()` on a button via `executeActionInWebview`
+- Execute `type()` on an input field
+- Verify DOM state changed after each action
 
-#### 4. Action Execution via Webview
-Update action handler:
-- `click()`: Use `webview.eval()` to find element and `.click()` it
-- `type()`: Use `webview.eval()` to focus and set value
-- `scroll()`: Use `webview.eval()` with `window.scrollBy()`
-- `navigate()`: Use Tauri command to navigate the webview
+#### 4. Test: NavBar Navigation
+- Type URL in NavBar → verify browser webview navigates
+- Click Back/Forward → verify navigation history works
+- Verify URL display updates after navigation
+
+#### 5. Test: Agent Loop End-to-End
+Create `apps/desktop/tests/agent-loop-e2e.test.ts`:
+- Load a simple page with a login form
+- Ask agent: "Fill in the email field with test@example.com"
+- Verify: agent extracts DOM → identifies input → types text → confirms done
+
+#### 6. Static Test Page
+Create `apps/desktop/test-fixtures/test-page.html`:
+- Simple form: email input, password input, submit button
+- Navigation links (Home, About, Contact)
+- A heading and some text content
+- Used as the target for integration tests
 
 ### Success Criteria
-- Agent can "summarize this page" on the embedded browser WITHOUT `--remote-debugging-port`
-- Agent actions (click, type) work on the embedded browser
-- Falls back to WebSocket CDP for external Chrome
-- Commit with message: `feat(sprint-18): webview DOM extraction — no CDP required for embedded browser`
+- At least 5 integration tests passing
+- DOM extraction correctly identifies elements on test page
+- Agent actions modify the page state
+- Tests runnable via `cd apps/desktop && pnpm test`
+- Commit: `test(sprint-22): desktop integration tests — DOM extraction, agent actions, e2e loop`
 ```
 
 ---
 
-## Sprint 19 — Extension v1.0 Polish
+## Sprint 23 — Screenshot + Vision Model Fallback
 
 ```
-## Task: Sprint 19 — Chrome Extension v1.0 Polish
+## Task: Sprint 23 — Screenshot-Based Page Understanding
 
-Read HANDOFF.md and .context.md first.
+Read HANDOFF.md, AGENTS.md, and Knowledge Base/wave 5/ docs if needed.
 
 ### Context
-The Chrome Extension works but needs polish for a v1.0 release:
-- Default Vite favicon, no branded icons
-- No onboarding flow for first-time users
-- No keyboard shortcuts
-- Settings doesn't show which keys are set
-- No error boundary
+The AX tree extraction works well for standard pages but fails on:
+- Canvas-based apps (Google Maps, Figma, games)
+- Complex SPAs with shadow DOM
+- Pages with heavy dynamic rendering
+For these, a screenshot + vision model provides better understanding.
 
 ### Deliverables
 
-#### 1. Extension Icons
-- Generate icons using the image generation tool: Wave logo (◉ symbol) in accent purple (#6c63ff) on dark background
-- Save as: 16x16, 32x32, 48x48, 128x128 PNG
-- Add to `apps/extension/` and reference in `manifest.json`
+#### 1. Screenshot Capture
+In `packages/native-bindings/src/cdp.ts`:
+- Add `captureScreenshot(): Promise<string>` method
+- For embedded webview: Use Tauri's `webview.eval('...')` to capture canvas
+  OR use the `Page.captureScreenshot` CDP command for external Chrome
+- Return base64-encoded PNG
 
-#### 2. Onboarding
-Create `packages/ui-components/src/layout/OnboardingView.tsx`:
-- 3-step onboarding: Welcome → Choose Provider → Enter API Key
-- Shows on first launch (check `chrome.storage.local` for `onboarded` flag)
-- Animated slide transitions between steps
-- Skip button available
+In `packages/ext-bindings/src/cdp.ts`:
+- Add `captureScreenshot(): Promise<string>`
+- Use `chrome.debugger` + `Page.captureScreenshot` CDP command
+- Detach after capture
 
-#### 3. Keyboard Shortcuts
-In `manifest.json`:
-- Add `commands` section with `_execute_side_panel` shortcut
-- Default: `Ctrl+Shift+W` (Windows) / `Cmd+Shift+W` (Mac)
-- Add shortcut hint in the UI
+#### 2. Vision-Aware Context Builder
+In `packages/core/src/domain/context-builder.ts`:
+- Add `.screenshot(base64Image: string)` method
+- Constructs a multimodal message with image content
+- Only for providers that support vision: OpenAI (gpt-4o), Anthropic (claude-3), Gemini (all)
+- Reduces text context budget when screenshot is included
 
-#### 4. Settings Enhancements
+#### 3. Vision-Aware Adapters
+Update the 3 adapters to handle multimodal messages:
+- OpenAI: `{ type: "image_url", image_url: { url: "data:image/png;base64,..." } }`
+- Anthropic: `{ type: "image", source: { type: "base64", media_type: "image/png", data: "..." } }`
+- Gemini: `{ inlineData: { mimeType: "image/png", data: "..." } }`
+
+#### 4. Fallback Logic in Agent Loop
+In `packages/core/src/domain/agent-loop.ts`:
+- After AX tree extraction, check if result has < 5 interactive elements
+- If so, capture screenshot and use vision-aware context instead
+- Status: "📸 Taking screenshot for visual analysis..."
+
+#### 5. User Toggle
 In `SettingsView.tsx`:
-- Show "✓ Key set" indicator next to providers that have API keys stored
-- Add "Clear key" button per provider
-- Add "Test connection" button that sends a minimal prompt to verify the key works
-- Show model info: context window size, cost per 1K tokens
-
-#### 5. Error Boundary
-Create `packages/ui-components/src/layout/ErrorBoundary.tsx`:
-- React error boundary wrapping the entire app
-- Shows friendly error message with "Reload" button
-- Logs error details to console
-
-#### 6. Meta Tags
-In `apps/extension/sidepanel.html`:
-- Update title to "Wave — AI Browser Assistant"
-- Add meta description
-- Add favicon reference
-
-### Success Criteria
-- Extension has branded icons (visible in chrome://extensions)
-- First-time users see onboarding flow
-- Keyboard shortcut opens Side Panel
-- Settings shows key status per provider
-- Error boundary catches and displays crashes gracefully
-- `pnpm --filter @wave/extension build` — clean
-- Commit with message: `feat(sprint-19): extension v1.0 polish — icons, onboarding, shortcuts, error boundary`
-```
-
----
-
-## Sprint 20 — Local SLM Router (WebGPU)
-
-```
-## Task: Sprint 20 — Local SLM Intent Router
-
-Read HANDOFF.md, KB_INDEX.md, and optionally:
-- Knowledge Base/wave 1-4/SmolLM2 Router Prompt Engineering.md
-- Knowledge Base/Local LLM Browser Inference Comparison.md
-
-### Context
-Currently, `isPageQuery()` uses keyword matching to detect page-aware queries.
-This is brittle — "summarize" triggers agent mode even for "summarize recursion".
-Replace with a local SLM that classifies intent with higher accuracy.
-
-### Approach
-Use WebLLM (https://webllm.mlc.ai/) to run a small model entirely in the browser/Tauri.
-Target: SmolLM2-360M or Phi-3-mini (quantized to 4-bit, ~200MB).
-
-### Deliverables
-
-#### 1. WebLLM Integration
-Create `packages/core/src/domain/local-router.ts`:
-- Initialize WebLLM engine with chosen small model
-- Classify intent: "chat" | "page_query" | "page_action"
-- Use structured prompt: given user message, output JSON `{intent: "...", confidence: 0.95}`
-- Fallback to keyword matching if WebLLM not loaded yet
-
-#### 2. Model Loading UI
-Create `packages/ui-components/src/layout/ModelLoader.tsx`:
-- Progress bar for model download/initialization
-- Shows "Loading local AI model..." on first use
-- Persists model to IndexedDB cache after first download
-- "Skip" button to use cloud-only mode
-
-#### 3. Wire into Both Platforms
-- Extension: Load in sidepanel.tsx, replace `isPageQuery()`
-- Desktop: Load in App.tsx, replace `isPageQuery()`
-- If model not loaded, fall back to keyword matching (graceful degradation)
-
-#### 4. Auto-Titling
-Use the local model for conversation auto-titling instead of cloud LLM:
-- Saves API tokens on every new conversation
-- Update `handleSend` in both platforms
+- Add toggle: "Use vision model for complex pages"
+- Persist to storage
+- Default: enabled
 
 ### Important Notes
-- WebLLM requires WebGPU — check `navigator.gpu` availability
-- First load downloads ~200MB model — must show progress
-- After first load, model cached in IndexedDB (instant subsequent loads)
-- Do NOT block the UI during model loading — run in background
+- Vision API calls are more expensive — only use as fallback
+- Screenshot size: resize to max 1024x768 before sending
+- Keep AX tree as primary — only fall back to screenshot when tree is sparse
+- Not all models support vision — check provider capabilities before sending
 
 ### Success Criteria
-- Intent classification works: "what's on this page" → page_query, "explain recursion" → chat
-- Model loads with progress indication
-- Falls back to keywords if WebGPU unavailable
-- Auto-titling uses local model
-- Commit with message: `feat(sprint-20): local SLM router — WebGPU intent classification`
+- Screenshot captured via both CDP and webview extraction
+- Vision messages correctly formatted for all 3 providers
+- Agent falls back to screenshot on sparse AX trees (< 5 elements)
+- Toggle in settings to enable/disable
+- `pnpm --filter @wave/extension build` — clean
+- `cd apps/desktop && npx vite build` — clean
+- Commit: `feat(sprint-23): screenshot + vision fallback — multimodal page understanding`
+```
+
+---
+
+## Sprint 24 — Tab Management + Cross-Tab Workflows
+
+```
+## Task: Sprint 24 — Multi-Tab Orchestration
+
+Read HANDOFF.md and AGENTS.md first.
+
+### Context
+Currently, the agent can only interact with ONE tab/page at a time.
+For complex workflows like "compare prices on Amazon and eBay", the agent
+needs to manage multiple tabs and switch between them.
+
+### Deliverables
+
+#### 1. Tab Manager
+Create `packages/core/src/domain/tab-manager.ts`:
+- Track open tabs with their IDs, URLs, and titles
+- Methods: `openTab(url)`, `closeTab(id)`, `switchTab(id)`, `listTabs()`
+- Maintain a `currentTabId` state
+
+#### 2. Extension Tab Manager
+In `packages/ext-bindings/src/tabs.ts`:
+- Implement using `chrome.tabs` API
+- `openTab(url)`: `chrome.tabs.create({ url })`
+- `switchTab(id)`: `chrome.tabs.update(id, { active: true })`
+- `listTabs()`: `chrome.tabs.query({})`
+- Listen for `chrome.tabs.onRemoved` to clean up
+
+#### 3. Desktop Tab Manager
+In `packages/native-bindings/src/tabs.ts`:
+- For embedded browser: manage via Tauri WebviewWindow
+- `openTab(url)`: create new webview or navigate existing
+- For external Chrome: use CDP `Target.createTarget`
+- `listTabs()`: combine embedded + CDP targets
+
+#### 4. Agent Tab Tools
+In `packages/core/src/domain/agent-tools.ts`:
+- Add tool definitions:
+  - `open_tab(url)` — Open a new tab
+  - `switch_tab(id)` — Switch to a specific tab
+  - `close_tab(id)` — Close a tab
+  - `list_tabs()` — Get all open tabs
+- Update `tool-call-parser.ts` to handle these new actions
+
+#### 5. Agent Loop Multi-Tab Support
+In `packages/core/src/domain/agent-loop.ts`:
+- Track `currentTabId` in loop state
+- After `switch_tab`, extract page context from the new tab
+- After `open_tab`, wait for load then switch to new tab
+- Show tab switches in step visualization
+
+#### 6. Tab Bar UI
+Create `packages/ui-components/src/layout/TabBar.tsx`:
+- Show open tabs as clickable pills below the NavBar (desktop only)
+- Active tab highlighted
+- Close button on each tab
+- "+" button to open new tab
+
+### Important Notes
+- Extension already has tab access via `chrome.tabs` permission
+- Desktop needs to handle both embedded webview AND external Chrome tabs
+- Agent should see ALL tabs in its context (e.g., "Tab 1: Amazon.com, Tab 2: eBay.com")
+- Max tabs: 10 (prevent runaway tab creation)
+
+### Success Criteria
+- Agent can "Open Amazon and eBay, then compare the price of iPhone 15"
+- Tab bar shows open tabs in desktop app
+- Extension lists available tabs correctly
+- Tool parser handles open_tab, switch_tab, close_tab, list_tabs
+- Commit: `feat(sprint-24): multi-tab orchestration — open, switch, close tabs from agent`
+```
+
+---
+
+## Sprint 25 — CI/CD Pipeline
+
+```
+## Task: Sprint 25 — Automated Build Pipeline
+
+Read HANDOFF.md first.
+
+### Context
+Currently builds are manual. We need:
+1. CI: Lint + test + build on every push
+2. CD: Produce distributable artifacts (Extension .zip, Desktop .dmg/.exe)
+
+### Deliverables
+
+#### 1. GitHub Actions: CI
+Create `.github/workflows/ci.yml`:
+- Trigger: push to main, PRs
+- Jobs:
+  - `test`: Run `cd packages/core && npx vitest run`
+  - `build-extension`: Run `pnpm --filter @wave/extension build`
+  - `build-desktop-frontend`: Run `cd apps/desktop && npx vite build`
+  - `typecheck`: Run `pnpm -r typecheck` (all packages)
+- Node 22, pnpm 10
+- Cache pnpm store
+
+#### 2. GitHub Actions: Desktop Release
+Create `.github/workflows/release-desktop.yml`:
+- Trigger: tag push (`v*`)
+- Matrix: macOS, Windows, Linux
+- Steps:
+  - Install Rust + pnpm
+  - `cd apps/desktop && pnpm tauri build`
+  - Upload artifacts: .dmg (mac), .msi/.exe (win), .AppImage/.deb (linux)
+- Use `tauri-apps/tauri-action@v0` for cross-platform builds
+
+#### 3. GitHub Actions: Extension Release
+Create `.github/workflows/release-extension.yml`:
+- Trigger: tag push (`v*`)
+- Steps:
+  - Build extension
+  - Zip `apps/extension/dist/` as `wave-extension-v{version}.zip`
+  - Upload as release artifact
+  - (Optional) Auto-publish to Chrome Web Store via API
+
+#### 4. Quality Gates
+In CI workflow:
+- Bundle size check: fail if extension > 500KB gzipped (after Sprint 21 fix)
+- Test count: fail if < 60 tests
+- TypeScript: strict mode, no errors
+
+#### 5. Local Pre-commit Hook
+Create `.husky/pre-commit` (or simple script):
+- Run `pnpm -r typecheck`
+- Run `cd packages/core && npx vitest run`
+- Block commit on failure
+
+#### 6. Version Bumping
+Create `scripts/bump-version.sh`:
+- Update version in: package.json (root), apps/extension/manifest.json,
+  apps/desktop/src-tauri/tauri.conf.json, apps/desktop/package.json
+- Create git tag
+- Usage: `./scripts/bump-version.sh 0.2.0`
+
+### Success Criteria
+- CI runs on push: tests, typecheck, build all pass
+- Desktop release builds for macOS (at minimum)
+- Extension release produces a .zip artifact
+- `npm run ci` works locally as a pre-push check
+- Commit: `ci(sprint-25): GitHub Actions — CI pipeline + release workflows`
 ```
 
 ---
@@ -344,15 +365,14 @@ Use this generic prompt to start ANY session working on Wave:
 ## Continue Wave Development
 
 Read these files in order before doing anything:
-1. HANDOFF.md — current project state, file structure, bugs
+1. HANDOFF.md — current project state, file structure, bugs, sprint history
 2. .context.md — conventions, critical reminders
 3. LEARNINGS.md — technical gotchas to avoid
-4. KB_INDEX.md — only if you need to read research docs
 
-Then check:
-- `git log --oneline -5` to see recent commits
-- `cd packages/core && npx vitest run` to verify tests pass
-- `pnpm --filter @wave/extension build` to verify extension builds
+Then verify the project compiles and tests pass:
+  git log --oneline -5
+  cd packages/core && npx vitest run
+  pnpm --filter @wave/extension build
 
 After confirming everything is green, proceed with: [PASTE SPECIFIC SPRINT TASK]
 ```
