@@ -185,6 +185,66 @@ All notable changes to Wave are documented here.
 - Desktop: uses local router for intent classification + auto-titling
 - Extension: uses local router with background loading
 
-### Known Issues
-- 🔴 WebLLM bloats extension bundle to 6.2MB (2.2MB gzip) — needs code splitting
-- Extension icons are identical 326KB files (not properly resized)
+## [0.7.0] — 2026-05-13
+
+### Performance
+
+#### Bundle Code-Splitting (Sprint 21)
+- WebLLM changed from static to dynamic `import()` — loads only when `init()` called
+- Extension: app-critical chunks ~90KB gzip (sidepanel 10KB + core 10KB + react 60KB)
+- Desktop: app-critical chunks ~85KB gzip (index 15KB + core 13KB + react 57KB)
+- WebLLM lazy chunk: ~2.1MB (loaded on-demand, cached in IndexedDB)
+- Removed duplicate `import './App.css'` in desktop App.tsx
+- Removed unused `offscreen` permission from manifest.json
+- Added `manualChunks` function-based splitting in both vite configs
+
+### Added
+
+#### Integration Tests (Sprint 22)
+- `apps/desktop/tests/` — 5 test files with JSDOM-based integration tests
+- `dom-extraction.test.ts` — verifies DOM extractor script finds interactive elements
+- `agent-actions.test.ts` — tests click/type/scroll action execution
+- `agent-loop-e2e.test.ts` — end-to-end agent loop with mock adapter
+- `navbar-navigation.test.ts` — NavBar URL input and navigation
+- `tests/setup.ts` — JSDOM + Tauri API mock setup
+- `test-fixtures/test-page.html` — HTML test page with form elements
+
+#### Screenshot + Vision Model (Sprint 23)
+- `captureScreenshot()` method on BrowserController interface
+- Extension: `Page.captureScreenshot` via chrome.debugger CDP
+- Desktop: webview canvas capture + WebSocket CDP fallback
+- `ContextBuilder.screenshot(base64)` — embeds image in multimodal message
+- `ContentPart` type: `{ type: 'text', text } | { type: 'image', data, mimeType }`
+- All 3 adapters updated for multimodal message formatting
+- Agent loop: vision fallback triggers when AX tree has < 5 elements
+- `taking_screenshot` status indicator in both platforms
+- Settings toggle: "Use vision model for complex pages"
+
+#### Multi-Tab Orchestration (Sprint 24)
+- `TabManager` class (58 LOC) — orchestrates tab lifecycle
+- `TabController` interface — platform-agnostic tab operations
+- `ExtTabController` — Chrome extension implementation via `chrome.tabs` API
+- `NativeTabController` — Tauri implementation via CDP `Target.createTarget`
+- Agent tools: `open_tab(url)`, `switch_tab(id)`, `close_tab(id)`, `list_tabs()`
+- Agent loop: tab list injected into context when multiple tabs open
+- `TabBar` component: clickable tab pills with close buttons and "+" new tab
+- Both platforms wired: extension background.ts + desktop App.tsx
+
+#### CI/CD Pipeline (Sprint 25)
+- `.github/workflows/ci.yml` — test + typecheck + build + bundle size check on push/PR
+- `.github/workflows/release-desktop.yml` — Tauri build on tag push (macOS/Windows/Linux)
+- `.github/workflows/release-extension.yml` — extension zip + upload on tag push
+- `.husky/pre-commit` — runs typecheck + tests before commit
+- `scripts/bump-version.sh` — version bump across all package.json + manifest + tauri.conf
+- Root `pnpm verify` script: typecheck → test → build
+- `prepare` script for husky installation
+
+### Changed
+- Agent loop `tabId` type widened: `number` → `string | number` (supports webview IDs)
+- Agent loop tracks `currentTabId` for multi-tab context
+- `tool-call-parser.ts` updated for `open_tab`, `switch_tab`, `close_tab`, `list_tabs`
+- `agent-tools.ts` expanded with tab tool definitions
+- Desktop App.tsx: tab state management, TabBar integration, screenshot status
+- Extension background.ts: tab actions, screenshot capture, proper box model calc
+- `ContentPart` type added to `types/message.ts` for multimodal messages
+- `conversation.ts` Zustand store expanded for tab awareness

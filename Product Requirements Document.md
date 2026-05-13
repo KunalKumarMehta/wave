@@ -1,7 +1,7 @@
 # PRD: Wave — AI-Native Browser
 
-> **Version:** 0.5 (Updated 2026-05-13)  
-> **Status:** Sprint 20 complete — full feature MVP, dual-platform
+> **Version:** 0.6 (Updated 2026-05-13)  
+> **Status:** Sprint 25 complete — feature-complete MVP, dual-platform
 
 ---
 
@@ -10,80 +10,65 @@
 Build an AI-native browser where artificial intelligence is the core interaction layer. The browser understands pages, takes actions, and generates rich UI — moving beyond static DOM rendering to an intelligent, agent-powered experience.
 
 ### Phased Approach
-1. **Phase 1 ✅ (Sprint 1–7):** Chrome Extension MVP — streaming chat, page awareness, cost tracking
-2. **Phase 2 ✅ (Sprint 8–20):** Agent loop, multi-conversation, Tauri desktop, embedded browser, local LLM
-3. **Phase 3 (Sprint 21+):** Performance, vision model, multi-tab, CI/CD, public release
+1. **Phase 1 ✅ (Sprint 1–7):** Chrome Extension MVP
+2. **Phase 2 ✅ (Sprint 8–25):** Agent loop, desktop app, embedded browser, tabs, vision, CI/CD
+3. **Phase 3 (Sprint 26–30):** Polish, accessibility, v1.0 release
 
 ---
 
-## 2. Core Objectives
+## 2. Feature Matrix
 
-| Objective | Status |
-|-----------|--------|
-| Multi-provider streaming (OpenAI, Anthropic, Gemini) | ✅ Sprint 2 |
-| Page awareness via AX tree | ✅ Sprint 4 |
-| Agent actions via CDP (click, type, scroll, navigate) | ✅ Sprint 5 |
-| Multi-step agent loop (observe→act→re-observe) | ✅ Sprint 8 |
-| Provider failover (auto-retry 429/5xx) | ✅ Sprint 8 |
-| Multi-conversation (CRUD, drawer, search, pin, export) | ✅ Sprint 10-11 |
-| Tauri desktop scaffold + system tray + shortcuts | ✅ Sprint 12-14 |
-| Shared hook architecture | ✅ Sprint 15 |
-| Agent loop hardening (error recovery, confirmation UI) | ✅ Sprint 16 |
-| Embedded browser (WebviewWindow split-pane) | ✅ Sprint 17 |
-| CDP auto-attach (webview DOM extraction) | ✅ Sprint 18 |
-| Extension v1.0 (icons, onboarding, shortcuts, error boundary) | ✅ Sprint 19 |
-| Local LLM router (WebGPU intent classification) | ✅ Sprint 20 |
-| Bundle optimization (code-split WebLLM) | 🔲 Sprint 21 |
-| Desktop integration testing | 🔲 Sprint 22 |
-| Screenshot + vision model fallback | 🔲 Sprint 23 |
-| Multi-tab orchestration | 🔲 Sprint 24 |
-| CI/CD pipeline | 🔲 Sprint 25 |
-
----
-
-## 3. Product Features
-
-### Implemented ✅
-
-- **Chat**: 3 cloud providers, streaming, markdown (tables/code/lists/blockquotes)
-- **Page Awareness**: AX tree + DOM extraction, token-budgeted context
-- **Agent Loop**: Multi-step state machine, error recovery, action confirmation UI
-- **Conversations**: CRUD, drawer, search, pin, export/import, LLM auto-titling
-- **Desktop**: Split-pane (browser + chat), NavBar, resizable, WebviewWindow
-- **Extension**: Icons, onboarding, keyboard shortcuts, error boundary
-- **Local SLM**: WebGPU intent classification, local auto-titling
-- **Cost Tracking**: Per-model pricing, session budget
-- **Provider Failover**: Auto-retry on rate limits, chain routing
-
-### Planned 🔲
-
-- **Performance**: Code-split WebLLM (6MB → lazy loaded)
-- **Vision Model**: Screenshot fallback for canvas/complex pages
-- **Multi-Tab**: Open, switch, close tabs from agent
-- **CI/CD**: GitHub Actions for test, build, release
+| Feature | Status | Sprint |
+|---------|--------|--------|
+| Multi-provider streaming (3 providers, 12 models) | ✅ | 2 |
+| Page awareness via AX tree | ✅ | 4 |
+| Agent actions (click, type, scroll, navigate) | ✅ | 5 |
+| Multi-step agent loop (observe→act→re-observe, 5 steps) | ✅ | 8 |
+| Provider failover (auto-retry 429/5xx) | ✅ | 8 |
+| Multi-conversation (CRUD, drawer, search, pin, export) | ✅ | 10-11 |
+| Tauri desktop + system tray + shortcuts | ✅ | 12-14 |
+| Shared hook architecture | ✅ | 15 |
+| Agent loop hardening (error recovery, confirmation UI) | ✅ | 16 |
+| Embedded browser (WebviewWindow split-pane) | ✅ | 17 |
+| CDP auto-attach (webview DOM extraction) | ✅ | 18 |
+| Extension v1.0 (icons, onboarding, shortcuts, error boundary) | ✅ | 19 |
+| Local LLM router (WebGPU intent classification) | ✅ | 20 |
+| Bundle optimization (code-split WebLLM, ~90KB app-critical) | ✅ | 21 |
+| Desktop integration tests | ✅ | 22 |
+| Screenshot + vision model fallback | ✅ | 23 |
+| Multi-tab orchestration (open, switch, close, list) | ✅ | 24 |
+| CI/CD pipeline (GitHub Actions, version bumping) | ✅ | 25 |
+| Proper icons + CSS polish + accessibility | 🔲 | 26 |
+| Adapter hardening + vision E2E test | 🔲 | 27 |
+| Conversation intelligence (search, edit, fork) | 🔲 | 28 |
+| Keyboard-first UX + WCAG compliance | 🔲 | 29 |
+| v1.0 release prep | 🔲 | 30 |
 
 ---
 
-## 4. Technical Constraints
+## 3. Technical Constraints
 
-| Constraint | Requirement |
-|-----------|-------------|
-| **Extension** | Chrome 116+ (Side Panel API), MV3 |
-| **Desktop** | macOS 12+, Windows 10+ (Tauri v2) |
-| **Security** | API keys ephemeral only. No disk persistence. |
-| **Performance** | Extension < 300KB gzip (after Sprint 21). Desktop < 500KB. |
-| **Privacy** | Zero telemetry. All data local. |
+| Constraint | Requirement | Current |
+|-----------|-------------|---------|
+| Extension bundle | < 300KB gzip (app-critical) | ✅ ~90KB |
+| Desktop bundle | < 500KB gzip (app-critical) | ✅ ~85KB |
+| Extension | Chrome 116+ (Side Panel API), MV3 | ✅ |
+| Desktop | macOS 12+, Windows 10+ (Tauri v2) | ✅ |
+| Security | API keys ephemeral only | ✅ |
+| Privacy | Zero telemetry, all data local | ✅ |
 
 ---
 
-## 5. Success Metrics
+## 4. Success Metrics
 
 | Metric | Target | Current |
 |--------|--------|---------|
 | Time to first token | < 500ms | ~800ms (Gemini) |
 | AX tree extraction | < 200ms | ~150ms |
-| Extension bundle | < 300KB gzip | 🔴 2.2MB (needs Sprint 21) |
-| Tests | > 60 | 62 (6 suites) |
-| Providers | 3+ | 3 |
-| Platforms | 2 | 2 (Extension + Desktop) |
-| Source LOC | — | 9,383 |
+| Extension app-critical | < 100KB gzip | ~90KB ✅ |
+| Tests | > 60 | 62 (6 suites) ✅ |
+| Providers | 3+ | 3 ✅ |
+| Platforms | 2 | 2 ✅ |
+| Source LOC | — | 10,759 |
+| Files | — | 168 tracked |
+| Commits | — | 22 |
