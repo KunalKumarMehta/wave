@@ -1,0 +1,81 @@
+.model-loader {
+  position: fixed;
+  inset: 0;
+  background: var(--wave-bg-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 2rem;
+}
+
+.model-loader__content {
+  width: 100%;
+  max-width: 300px;
+  text-align: center;
+}
+
+.model-loader__spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--wave-bg-tertiary);
+  border-top-color: var(--wave-accent);
+  border-radius: 50%;
+  margin: 0 auto 1.5rem;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.model-loader__title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  color: var(--wave-text-primary);
+}
+
+.model-loader__text {
+  font-size: 0.875rem;
+  color: var(--wave-text-secondary);
+  line-height: 1.5;
+  margin-bottom: 1.5rem;
+}
+
+.model-loader__progress-container {
+  height: 8px;
+  background: var(--wave-bg-secondary);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+}
+
+.model-loader__progress-bar {
+  height: 100%;
+  background: var(--wave-accent);
+  transition: width 0.3s ease-out;
+}
+
+.model-loader__percentage {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--wave-accent);
+  margin-bottom: 1.5rem;
+}
+
+.model-loader__skip {
+  background: none;
+  border: 1px solid var(--wave-border);
+  color: var(--wave-text-muted);
+  font-size: 0.75rem;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.model-loader__skip:hover {
+  border-color: var(--wave-text-muted);
+  color: var(--wave-text-secondary);
+}

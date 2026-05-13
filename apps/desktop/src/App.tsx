@@ -6,6 +6,8 @@ import { MessageList } from '@wave/ui-components/src/chat/MessageList.js';
 import { ConversationDrawer } from '@wave/ui-components/src/layout/ConversationDrawer.js';
 import { ActionConfirmation } from '@wave/ui-components/src/chat/ActionConfirmation.js';
 import { NavBar } from '@wave/ui-components/src/layout/NavBar.js';
+import { ModelLoader } from '@wave/ui-components/src/layout/ModelLoader.js';
+import { localRouter } from '@wave/core/src/domain/local-router.js';
 import { NativeIPCProvider, NativeStorageProvider, NativeBrowserController } from '@wave/native-bindings';
 import { invoke } from '@tauri-apps/api/core';
 import { useConversationManager, generateId, isPageQuery, CHAT_SYSTEM_PROMPT, TITLE_SYSTEM_PROMPT } from '@wave/core';
@@ -163,6 +165,27 @@ function App() {
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ action: string; params: any; resolve: (val: boolean) => void } | null>(null);
+  const [localModelLoading, setLocalModelLoading] = useState(false);
+  const [localModelProgress, setLocalModelProgress] = useState(0);
+  const [useLocalModel, setUseLocalModel] = useState(false);
+
+  useEffect(() => {
+    storage.config.get<boolean>('skipLocalModel').then((skip) => {
+      if (!skip && 'gpu' in navigator) {
+        setLocalModelLoading(true);
+        localRouter.init((p) => setLocalModelProgress(p))
+          .then(() => {
+            setLocalModelLoading(false);
+            setUseLocalModel(true);
+          })
+          .catch((err) => {
+            console.warn('[Wave] Local model init failed:', err);
+            setLocalModelLoading(false);
+          });
+      }
+    });
+  }, []);
+
   const browserPaneRef = useRef<HTMLDivElement>(null);
 
   // Sync native browser webview bounds with DOM container
@@ -238,9 +261,17 @@ function App() {
     await convStorage.addMessage(convId, userMsg);
     await mgr.refreshConvList();
 
-    // Auto-title via LLM on first message
+    // Auto-title via local SLM on first message
     if (isFirstMessage) {
-      const adapter = adapters[mgr.activeProvider];
+      if (useLocalModel) {
+        localRouter.generateTitle(content).then((title) => {
+          if (title) {
+            convStorage.updateMeta(convId!, { title });
+            mgr.refreshConvList();
+          }
+        });
+      } else {
+        const adapter = adapters[mgr.activeProvider];
       if (adapter) {
         try {
           let generatedTitle = '';
@@ -264,11 +295,15 @@ function App() {
         }
       }
     }
+  }
 
     abortControllerRef.current = new AbortController();
 
+    const classification = await localRouter.classify(content);
+    const isPageAware = classification.intent === 'page_query' || classification.intent === 'page_action';
+
     try {
-      if (isPageQuery(content)) {
+      if (isPageAware) {
         const targets = await cdp.getTargets();
         const tab = targets.find((t) => t.id === 'browser') || targets.find((t) => t.type === 'tab');
 
@@ -407,6 +442,15 @@ function App() {
               params={confirmAction.params}
               onAllow={() => { confirmAction.resolve(true); setConfirmAction(null); }}
               onDeny={() => { confirmAction.resolve(false); setConfirmAction(null); }}
+            />
+          )}
+          {localModelLoading && (
+            <ModelLoader 
+              progress={localModelProgress} 
+              onSkip={() => {
+                storage.config.set('skipLocalModel', true);
+                setLocalModelLoading(false);
+              }} 
             />
           )}
           {!mgr.settingsOpen && (

@@ -5,10 +5,10 @@ import { SidePanel } from '@wave/ui-components';
 import { ExtIPCProvider, ExtStorageProvider } from '@wave/ext-bindings';
 import { SettingsView } from '@wave/ui-components/src/layout/SettingsView.js';
 import { ConversationDrawer } from '@wave/ui-components/src/layout/ConversationDrawer.js';
-import { MessageList } from '@wave/ui-components/src/chat/MessageList.js';
-import { InputBar } from '@wave/ui-components/src/chat/InputBar.js';
 import { OnboardingView } from '@wave/ui-components/src/layout/OnboardingView.js';
 import { ErrorBoundary } from '@wave/ui-components/src/layout/ErrorBoundary.js';
+import { ModelLoader } from '@wave/ui-components/src/layout/ModelLoader.js';
+import { localRouter } from '@wave/core/src/domain/local-router.js';
 import type { UIProvider, Message } from '@wave/core';
 import { useConversationManager, generateId, isPageQuery, TITLE_SYSTEM_PROMPT } from '@wave/core';
 import { costTracker } from '@wave/core/src/domain/cost-tracker.js';
@@ -175,10 +175,26 @@ function App() {
 
   const [confirmAction, setConfirmAction] = React.useState<{ action: string; params: any; confirmId: string; port: chrome.runtime.Port } | null>(null);
   const [showOnboarding, setShowOnboarding] = React.useState(false);
+  const [localModelLoading, setLocalModelLoading] = React.useState(false);
+  const [localModelProgress, setLocalModelProgress] = React.useState(0);
+  const [useLocalModel, setUseLocalModel] = React.useState(false);
 
   useEffect(() => {
-    chrome.storage.local.get('onboarded').then((res) => {
+    chrome.storage.local.get(['onboarded', 'skipLocalModel']).then((res) => {
       if (!res.onboarded) setShowOnboarding(true);
+      
+      if (!res.skipLocalModel && 'gpu' in navigator) {
+        setLocalModelLoading(true);
+        localRouter.init((p) => setLocalModelProgress(p))
+          .then(() => {
+            setLocalModelLoading(false);
+            setUseLocalModel(true);
+          })
+          .catch((err) => {
+            console.warn('[Wave] Local model init failed:', err);
+            setLocalModelLoading(false);
+          });
+      }
     });
   }, []);
 
@@ -241,9 +257,17 @@ function App() {
     await convStorage.addMessage(convId, userMsg);
     await mgr.refreshConvList();
 
-    // Auto-title via LLM on first message
+    // Auto-title via local SLM on first message
     if (isFirstMessage) {
-      const titlePort = chrome.runtime.connect({ name: 'cloud-stream' });
+      if (useLocalModel) {
+        localRouter.generateTitle(content).then((title) => {
+          if (title) {
+            convStorage.updateMeta(convId!, { title }).then(mgr.refreshConvList);
+          }
+        });
+      } else {
+        // Fallback to cloud auto-title
+        const titlePort = chrome.runtime.connect({ name: 'cloud-stream' });
       let generatedTitle = '';
       titlePort.onMessage.addListener((msg: StreamMsg) => {
         if (msg.chunk?.type === 'text_delta') {
@@ -270,8 +294,10 @@ function App() {
         },
       });
     }
+  }
 
-    const isPageAware = isPageQuery(content);
+    const classification = await localRouter.classify(content);
+    const isPageAware = classification.intent === 'page_query' || classification.intent === 'page_action';
 
     if (isPageAware) {
       const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
@@ -389,6 +415,15 @@ function App() {
             chrome.storage.local.set({ onboarded: true });
             setShowOnboarding(false);
           }}
+        />
+      )}
+      {localModelLoading && (
+        <ModelLoader 
+          progress={localModelProgress} 
+          onSkip={() => {
+            chrome.storage.local.set({ skipLocalModel: true });
+            setLocalModelLoading(false);
+          }} 
         />
       )}
       {!mgr.settingsOpen && (
